@@ -1,0 +1,16 @@
+name: pybricks
+
+channels:
+  - defaults
+  - 3dhubs
+  - conda-forge
+
+dependencies:
+  # - python = 3.8.*
+  - micropython
+  - pip
+
+  - pip:
+    # These do not correspond 100% with each other, but can't find better match
+    - pybricks==3.1.0
+    - pybricksdev==1.0.0a24
