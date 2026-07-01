@@ -2,7 +2,7 @@ from pybricks.hubs import MoveHub
 from pybricks.tools import wait
 from pybricks.pupdevices import ColorDistanceSensor
 from pybricks.pupdevices import Motor
-from pybricks.parameters import Port, Direction, Stop, Color, Side
+from pybricks.parameters import Port, Direction, Color, Side
 
 
 class Program:
@@ -25,23 +25,13 @@ class Program:
 
         self.hub.light.on(Color.RED)
 
-        self.cam_motor.control.limits(speed=None, acceleration=None, torque=30)
-
-        self.cam_motor.run(100)
-        while not self.cam_motor.control.stalled():
-            wait(10)
-
-        left_angle = self.cam_motor.angle()
+        # Move Hub does not support control.limits(torque=...); use duty_limit instead.
+        left_angle = self.cam_motor.run_until_stalled(100, duty_limit=30)
         print("left angle:", left_angle)
-        self.cam_motor.stop()
 
-        self.cam_motor.run(-100)
-        while not self.cam_motor.control.stalled():
-            wait(10)
-
-        right_angle = self.cam_motor.angle()
+        right_angle = self.cam_motor.run_until_stalled(-100, duty_limit=30)
         print("right angle:", right_angle)
-        self.cam_motor.stop()
+
         self.cam_motor.run_target(
             speed=100, target_angle=int((int(left_angle) + int(right_angle)) // 2)
         )
@@ -76,7 +66,7 @@ class Program:
                 self.cam_motor.run_target(speed=100, target_angle=0)
 
     def run(self):
-        print("left motor load = ", self.cam_motor.control.load())
+        print("cam motor load = ", self.cam_motor.load())
 
         if abs(self.MAX_LOOKING * self.lookingDirection - self.cam_motor.angle()) < 3:
             print("switch looking direction", self.lookingDirection)
@@ -98,10 +88,7 @@ class Program:
             return
 
         # Wall near or camera motor stalling: Turn
-        if (
-                self.sensor.distance() <= 80
-                or self.cam_motor.control.stalled()
-        ):
+        if self.sensor.distance() <= 80 or self.cam_motor.stalled():
             self.hub.light.on(Color.BLUE)
             current_cam_pos = 1 if self.cam_motor.angle() > 0 else -1
 
