@@ -1,9 +1,16 @@
-Flash pybricks firmware:
-Go to https://code.pybricks.com/ on Chrome (does not work in Brave)
+# Flash pybricks firmware:
+- Go to https://code.pybricks.com/ on Chrome (does not work in Brave)
+- Click "Install Pybricks Firmware" and follow instructions
+- The hub should now also connected over BLE.
 
-Run:
+## Setup
+
+Install [pixi](https://pixi.sh)
+
+## Run
+
 ```sh
-pybricksdev run ble pybricks/main.py
+pixi run run
 ```
 
 Pybricksdev does not support a 'stop' command (yet)
