@@ -1,0 +1,13 @@
+[project]
+name = "pybricks-robot"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+
+[tool.ty.environment]
+python = ".pixi/envs/default"
+python-version = "3.13"
+
+[tool.pyright]
+venvPath = ".pixi/envs"
+venv = "default"
+pythonVersion = "3.13"

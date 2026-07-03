@@ -20,6 +20,7 @@
     // "python.terminal.activateEnvironment": false,
     "python-envs.pythonProjects": [],
     "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/default/bin/python",
+    "ty.interpreter": "${workspaceFolder}/.pixi/envs/default/bin/python",
     "python-envs.defaultEnvManager": "renan-r-santos.pixi-code:pixi",
     "python-envs.defaultPackageManager": "renan-r-santos.pixi-code:pixi",
 }
