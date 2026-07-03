@@ -3,6 +3,10 @@ from pybricks.tools import wait
 from pybricks.pupdevices import ColorDistanceSensor
 from pybricks.pupdevices import Motor
 from pybricks.parameters import Port, Direction, Color, Side
+from pybricks.messaging import BLERadio
+
+REMOTE_CHANNEL = 7
+radio = BLERadio(observe_channels=[REMOTE_CHANNEL])
 
 
 class Program:
@@ -40,6 +44,18 @@ class Program:
 
         self.resume_camera()
 
+    def apply_remote(self) -> bool:
+        """Apply drive commands broadcast from the PC, if any."""
+        cmd = radio.observe(REMOTE_CHANNEL)
+        if cmd is None:
+            return False
+
+        left_dc, right_dc = cmd
+        self.left_motor.dc(left_dc)
+        self.right_motor.dc(right_dc)
+        self.hub.light.on(Color.YELLOW)
+        return True
+
     def main_loop(self):
         while True:
             # print("dist:", sensor.distance())
@@ -66,6 +82,10 @@ class Program:
                 self.cam_motor.run_target(speed=100, target_angle=0)
 
     def run(self):
+        if self.apply_remote():
+            wait(10)
+            return
+
         print("cam motor load = ", self.cam_motor.load())
 
         if abs(self.MAX_LOOKING * self.lookingDirection - self.cam_motor.angle()) < 3:

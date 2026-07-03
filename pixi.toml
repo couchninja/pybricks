@@ -5,12 +5,18 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 version = "0.1.0"
 
 [tasks]
-run = "pybricksdev run ble pybricks/main.py"
+run = "python scripts/ble_control.py run pybricks/main.py"
+dev = "pybricksdev run ble pybricks/main.py --stay-connected"
+scan = "python scripts/ble_control.py scan"
+stop = "python scripts/ble_control.py stop"
+download = "python scripts/ble_control.py download pybricks/main.py"
+remote = "python scripts/remote_control.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
 python = ">=3.13,<3.14"
 
 [pypi-dependencies]
-pybricks = "==4.0.0"
 pybricksdev = "==2.3.2"
+pybricks-ble = { git = "https://github.com/fkleon/pybricks-ble.git" }
+dbus-fast = ">=5.0"
