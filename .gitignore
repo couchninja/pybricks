@@ -5,3 +5,4 @@
 .pixi/*
 !.pixi/config.toml
 .DS_Store
+__pycache__

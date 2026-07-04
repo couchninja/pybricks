@@ -1,137 +1,171 @@
+"""Thin BLE command server for the Move Hub.
+
+Commands arrive on COMMAND_CHANNEL via BLERadio. Responses go to stdout
+(GATT) so the host can read them without BLE scanning.
+"""
+
 from pybricks.hubs import MoveHub
-from pybricks.tools import wait
-from pybricks.pupdevices import ColorDistanceSensor
-from pybricks.pupdevices import Motor
-from pybricks.parameters import Port, Direction, Color, Side
 from pybricks.messaging import BLERadio
+from pybricks.parameters import Color, Direction, Port
+from pybricks.pupdevices import ColorDistanceSensor, Motor
+from pybricks.tools import wait
 
-REMOTE_CHANNEL = 7
-radio = BLERadio(observe_channels=[REMOTE_CHANNEL])
+COMMAND_CHANNEL = 7
+
+MOTOR_PORTS = {
+    "A": (Port.A, Direction.CLOCKWISE),
+    "B": (Port.B, Direction.COUNTERCLOCKWISE),
+    "C": (Port.C, Direction.COUNTERCLOCKWISE),
+}
+
+SENSOR_PORTS = {
+    "D": Port.D,
+}
+
+COLORS = {
+    "NONE": Color.NONE,
+    "BLACK": Color.BLACK,
+    "GRAY": Color.GRAY,
+    "WHITE": Color.WHITE,
+    "RED": Color.RED,
+    "ORANGE": Color.ORANGE,
+    "BROWN": Color.BROWN,
+    "YELLOW": Color.YELLOW,
+    "GREEN": Color.GREEN,
+    "CYAN": Color.CYAN,
+    "BLUE": Color.BLUE,
+    "VIOLET": Color.VIOLET,
+    "MAGENTA": Color.MAGENTA,
+}
 
 
-class Program:
-    MAX_LOOKING = 60
-    SPEED_REDUCE = 2
+def parse_int(value):
+    return int(value)
 
-    hub = MoveHub()
-    left_motor = Motor(Port.B, Direction.COUNTERCLOCKWISE)
-    right_motor = Motor(Port.A, Direction.CLOCKWISE)
-    cam_motor = Motor(Port.C, Direction.COUNTERCLOCKWISE)
-    sensor = ColorDistanceSensor(Port.D)
 
-    lookingDirection = -1
-    stuckTime = 0
-    toppledTime = 0
-    toppled = False
+def color_name(color):
+    name = str(color)
+    if "." in name:
+        return name.split(".")[-1]
+    return name
 
-    def __init__(self):
-        print(self.hub.imu.acceleration())
 
-        self.hub.light.on(Color.RED)
+def reply(seq, line):
+    print(str(seq) + " " + line)
 
-        # Move Hub does not support control.limits(torque=...); use duty_limit instead.
-        left_angle = self.cam_motor.run_until_stalled(100, duty_limit=30)
-        print("left angle:", left_angle)
 
-        right_angle = self.cam_motor.run_until_stalled(-100, duty_limit=30)
-        print("right angle:", right_angle)
+def command_line(cmd):
+    if isinstance(cmd, tuple):
+        return " ".join(str(part) for part in cmd)
+    return str(cmd)
 
-        self.cam_motor.run_target(
-            speed=100, target_angle=int((int(left_angle) + int(right_angle)) // 2)
-        )
-        self.cam_motor.stop()
-        self.cam_motor.reset_angle(angle=0)
 
-        self.resume_camera()
+def handle_command(seq, cmd, arg1="", arg2=""):
+    # Move Hub MicroPython can raise TypeError when list slices are passed as
+    # function arguments after motors/sensors are initialized.
+    seq = str(seq)
+    cmd = str(cmd)
 
-    def apply_remote(self) -> bool:
-        """Apply drive commands broadcast from the PC, if any."""
-        cmd = radio.observe(REMOTE_CHANNEL)
-        if cmd is None:
-            return False
-
-        left_dc, right_dc = cmd
-        self.left_motor.dc(left_dc)
-        self.right_motor.dc(right_dc)
-        self.hub.light.on(Color.YELLOW)
-        return True
-
-    def main_loop(self):
-        while True:
-            # print("dist:", sensor.distance())
-            # print("camera angle:", self.cam_motor.angle())
-
-            if self.hub.imu.up() == Side.TOP:
-                self.toppledTime = 0
-            else:
-                self.toppledTime += 1
-
-            if self.toppledTime < 5:
-                # print("untoppled")
-                if self.toppled:
-                    self.toppled = False
-                    self.resume_camera()
-
-                self.run()
-            else:
-                # print("toppled")
-                self.toppled = True
-                self.hub.light.on(Color.ORANGE)
-                self.left_motor.stop()
-                self.right_motor.stop()
-                self.cam_motor.run_target(speed=100, target_angle=0)
-
-    def run(self):
-        if self.apply_remote():
-            wait(10)
+    try:
+        if cmd == "ping":
+            reply(seq, "ok")
             return
 
-        print("cam motor load = ", self.cam_motor.load())
-
-        if abs(self.MAX_LOOKING * self.lookingDirection - self.cam_motor.angle()) < 3:
-            print("switch looking direction", self.lookingDirection)
-            self.lookingDirection = -self.lookingDirection
-            self.resume_camera()
-
-        # If stuck for a while, drive backwards
-        if self.stuckTime > 5:
-            self.hub.light.on(Color.RED)
-            print("Really stuck!!")
-
-            self.left_motor.dc(-50)
-            self.right_motor.dc(-50)
-            self.cam_motor.run_target(speed=100, target_angle=0)
-            wait(2000)
-
-            self.resume_camera()
-            self.stuckTime = 0
+        if cmd == "light.on":
+            hub.light.on(COLORS[arg1])
+            reply(seq, "ok")
             return
 
-        # Wall near or camera motor stalling: Turn
-        if self.sensor.distance() <= 80 or self.cam_motor.stalled():
-            self.hub.light.on(Color.BLUE)
-            current_cam_pos = 1 if self.cam_motor.angle() > 0 else -1
+        if cmd == "light.off":
+            hub.light.off()
+            reply(seq, "ok")
+            return
 
-            self.left_motor.dc(50 * current_cam_pos)
-            self.right_motor.dc(-50 * current_cam_pos)
-            self.cam_motor.run_target(speed=100, target_angle=0)
+        if cmd.startswith("motor."):
+            port = arg1
+            motor = motors[port]
+            action = cmd.split(".", 1)[1]
 
-            wait(500)
+            if action == "dc":
+                motor.dc(parse_int(arg2))
+            elif action == "run":
+                motor.run(parse_int(arg2))
+            elif action == "stop":
+                motor.stop()
+            elif action == "brake":
+                motor.brake()
+            elif action == "angle":
+                reply(seq, "val " + str(motor.angle()))
+                return
+            elif action == "speed":
+                reply(seq, "val " + str(motor.speed()))
+                return
+            elif action == "reset_angle":
+                if arg2:
+                    motor.reset_angle(parse_int(arg2))
+                else:
+                    motor.reset_angle()
+            else:
+                reply(seq, "err unknown motor command")
+                return
 
-            self.resume_camera()
-            self.stuckTime += 1
-        # Drive forward
-        else:
-            self.hub.light.on(Color.GREEN)
-            # Probably we cannot detect stalling if we call this every frame
-            self.left_motor.dc(100 // self.SPEED_REDUCE)
-            self.right_motor.dc(100 // self.SPEED_REDUCE)
-            self.stuckTime = 0
+            reply(seq, "ok")
+            return
 
+        if cmd.startswith("sensor."):
+            port = arg1
+            sensor = sensors[port]
+            action = cmd.split(".", 1)[1]
+
+            if action == "distance":
+                reply(seq, "val " + str(sensor.distance()))
+            elif action == "color":
+                reply(seq, "color " + color_name(sensor.color()))
+            elif action == "reflection":
+                reply(seq, "val " + str(sensor.reflection()))
+            elif action == "ambient":
+                reply(seq, "val " + str(sensor.ambient()))
+            else:
+                reply(seq, "err unknown sensor command")
+            return
+
+        reply(seq, "err unknown command")
+    except KeyError:
+        reply(seq, "err unknown port or color")
+    except (IndexError, ValueError):
+        reply(seq, "err bad arguments")
+    except Exception as exc:
+        reply(seq, "err " + type(exc).__name__ + ":" + str(exc))
+
+
+radio = BLERadio(observe_channels=[COMMAND_CHANNEL])
+hub = MoveHub()
+motors = {}
+for port_name, (port, direction) in MOTOR_PORTS.items():
+    motors[port_name] = Motor(port, direction)
+
+sensors = {}
+for port_name, port in SENSOR_PORTS.items():
+    sensors[port_name] = ColorDistanceSensor(port)
+
+hub.light.on(Color.GREEN)
+print("ready")
+
+while True:
+    cmd = radio.observe(COMMAND_CHANNEL)
+    if cmd is None:
         wait(10)
+        continue
 
-    def resume_camera(self):
-        self.cam_motor.run(100 * self.lookingDirection)
+    parts = command_line(cmd).split()
+    if len(parts) < 2:
+        wait(10)
+        continue
 
-
-Program().main_loop()
+    if len(parts) > 3:
+        handle_command(parts[0], parts[1], parts[2], parts[3])
+    elif len(parts) > 2:
+        handle_command(parts[0], parts[1], parts[2])
+    else:
+        handle_command(parts[0], parts[1])
+    wait(10)
