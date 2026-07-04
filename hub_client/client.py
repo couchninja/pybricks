@@ -18,27 +18,9 @@ class HubClientError(RuntimeError):
     """Raised when the hub returns an error response."""
 
 
-_NAMED_COLORS = (
-    "NONE",
-    "BLACK",
-    "GRAY",
-    "WHITE",
-    "RED",
-    "ORANGE",
-    "BROWN",
-    "YELLOW",
-    "GREEN",
-    "CYAN",
-    "BLUE",
-    "VIOLET",
-    "MAGENTA",
-)
-
-
 def _color_name(color: Color) -> str:
-    for name in _NAMED_COLORS:
-        known = getattr(Color, name)
-        if color.h == known.h and color.s == known.s and color.v == known.v:
+    for name, known in Color.__dict__.items():
+        if isinstance(known, Color) and color == known:
             return name
     raise HubClientError(f"unsupported color: {color!r}")
 

@@ -7,10 +7,15 @@ from typing import AsyncIterator, cast
 
 from dbus_fast.aio import MessageBus
 from dbus_fast.constants import BusType
-from pb_ble.bluezdbus import BlueZBroadcaster, PybricksBroadcastAdvertisement, get_adapter
-from pb_ble.constants import PybricksBroadcastData
-
 from hub_client.constants import COMMAND_CHANNEL
+from hub_client.pb_ble_import import load_bluezdbus
+
+_bluezdbus = load_bluezdbus()
+BlueZBroadcaster = _bluezdbus.BlueZBroadcaster
+PybricksBroadcastAdvertisement = _bluezdbus.PybricksBroadcastAdvertisement
+get_adapter = _bluezdbus.get_adapter
+
+from pb_ble.constants import PybricksBroadcastData
 
 
 class CommandBroadcaster:

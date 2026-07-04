@@ -41,7 +41,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/56/41/0013ec6c3a8b8e72379492050e7044fc03226575567222cbc5917de01a11/mpy_cross_v6-1.1.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
-      - pypi: git+https://github.com/pybricks/pybricks-api?rev=7900f03574ab8560a4954a1a0e59bb168aed1281#7900f03574ab8560a4954a1a0e59bb168aed1281
+      - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: git+https://github.com/fkleon/pybricks-ble.git#46e1c4e963d731cd42e1acfc00cd76a2c757ca51
       - pypi: https://files.pythonhosted.org/packages/d4/84/7ba3b51300818266b7ffd03c7170572b8f1c9d9f46978e929da7c8d7d00b/pybricksdev-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/28/b8/27e6312e86408a44fe16bd28ee12dd98608b39f7e7e57884a24e8f29b573/pyusb-1.3.1-py3-none-any.whl
@@ -83,7 +83,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ff/9c/bc5d4d8bcc5e4508f19e4e0702abf53c55629a2fd8b78ebb41aac389014c/mpy_cross_v6-1.1.2-py3-none-macosx_10_13_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
-      - pypi: git+https://github.com/pybricks/pybricks-api?rev=7900f03574ab8560a4954a1a0e59bb168aed1281#7900f03574ab8560a4954a1a0e59bb168aed1281
+      - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: git+https://github.com/fkleon/pybricks-ble.git#46e1c4e963d731cd42e1acfc00cd76a2c757ca51
       - pypi: https://files.pythonhosted.org/packages/d4/84/7ba3b51300818266b7ffd03c7170572b8f1c9d9f46978e929da7c8d7d00b/pybricksdev-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/1e/b9b0ddffae66996b8779f1f7958adc9f21c13a0448cd3be8d7fe589b5b0f/pyobjc_core-12.2.1-cp313-cp313-macosx_10_13_universal2.whl
@@ -128,7 +128,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/5c/cf/bd18cf8ae2108ddf30a9cac03dc65d3aae4f66fd3fae78d502661b5e9c4b/mpy_cross_v6-1.1.2-py3-none-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
-      - pypi: git+https://github.com/pybricks/pybricks-api?rev=7900f03574ab8560a4954a1a0e59bb168aed1281#7900f03574ab8560a4954a1a0e59bb168aed1281
+      - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: git+https://github.com/fkleon/pybricks-ble.git#46e1c4e963d731cd42e1acfc00cd76a2c757ca51
       - pypi: https://files.pythonhosted.org/packages/d4/84/7ba3b51300818266b7ffd03c7170572b8f1c9d9f46978e929da7c8d7d00b/pybricksdev-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/1e/b9b0ddffae66996b8779f1f7958adc9f21c13a0448cd3be8d7fe589b5b0f/pyobjc_core-12.2.1-cp313-cp313-macosx_10_13_universal2.whl
@@ -176,7 +176,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/df/fb/cc3101430b7cb8155673ee4dd4b754232a62560c71bf47a4d28414565263/mpy_cross_v6-1.1.2-py3-none-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/84/03/0d3ce49e2505ae70cf43bc5bb3033955d2fc9f932163e84dc0779cc47f48/prompt_toolkit-3.0.52-py3-none-any.whl
-      - pypi: git+https://github.com/pybricks/pybricks-api?rev=7900f03574ab8560a4954a1a0e59bb168aed1281#7900f03574ab8560a4954a1a0e59bb168aed1281
+      - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: git+https://github.com/fkleon/pybricks-ble.git#46e1c4e963d731cd42e1acfc00cd76a2c757ca51
       - pypi: https://files.pythonhosted.org/packages/d4/84/7ba3b51300818266b7ffd03c7170572b8f1c9d9f46978e929da7c8d7d00b/pybricksdev-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/28/b8/27e6312e86408a44fe16bd28ee12dd98608b39f7e7e57884a24e8f29b573/pyusb-1.3.1-py3-none-any.whl
@@ -879,9 +879,10 @@ packages:
   requires_dist:
   - wcwidth
   requires_python: '>=3.8'
-- pypi: git+https://github.com/pybricks/pybricks-api?rev=7900f03574ab8560a4954a1a0e59bb168aed1281#7900f03574ab8560a4954a1a0e59bb168aed1281
+- pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
   name: pybricks
-  version: 3.6.1
+  version: 4.0.0
+  sha256: 05aec9203025e10feba755f463537dd4da489ed2ee384e65d05ac5d697c8d58b
   requires_python: '>=3.8,<4.0'
 - pypi: git+https://github.com/fkleon/pybricks-ble.git#46e1c4e963d731cd42e1acfc00cd76a2c757ca51
   name: pybricks-ble
