@@ -24,9 +24,7 @@ async def test_motors(hub: MoveHub) -> None:
     for motor in motors:
         angle_before = await motor.angle()
         await motor.dc(30)
-        await asyncio.sleep(0.25)
         await motor.stop()
-        await asyncio.sleep(0.1)
         angle_after = await motor.angle()
         delta = angle_after - angle_before
         print(
@@ -45,7 +43,6 @@ async def test_light(hub: MoveHub) -> None:
     for color in colors:
         await hub.light.on(color)
         print(f"  light.on({_color_name(color)})")
-        await asyncio.sleep(0.35)
     await hub.light.off()
     print("  light.off()")
 
