@@ -1,4 +1,12 @@
-# Pybricks robot (BLE control)
+# Pybricks remote hub
+
+The Move Hub runs a thin BLE server that forwards commands directly to motors,
+sensors, and the hub light. This Linux machine connects over BLE and exposes a
+Pybricks-like API (`Motor.dc()`, `sensor.distance()`, `hub.light.on()`, etc.).
+
+Communication uses a hybrid transport: commands are BLE-broadcast on channel 7,
+responses come back over the GATT connection (stdout). The host stays connected
+during control, so BLE scanning on the PC is not required.
 
 ## Flash Pybricks firmware
 
@@ -17,7 +25,7 @@ pixi install
 
 Bluetooth must be enabled on this machine. On Linux, your user needs permission to use Bluetooth (usually automatic on desktop distros).
 
-## BLE control
+## Deploy the hub program
 
 Find your hub:
 
@@ -25,13 +33,13 @@ Find your hub:
 pixi run scan
 ```
 
-Upload and run the robot program (stops any running program first):
+Upload and start the thin-client program on the hub (disconnects when done):
 
 ```sh
 pixi run run
 ```
 
-Other commands:
+Other deploy commands:
 
 ```sh
 pixi run stop       # stop the program on the hub
@@ -45,31 +53,54 @@ Target a specific hub by name or address:
 pixi run python scripts/ble_control.py -n "Move Hub" run pybricks/main.py
 ```
 
-## Live remote control (arrow keys)
+## Run tests from this machine
 
-The robot listens for drive commands on BLE broadcast channel 7 using
-[pybricks-ble](https://github.com/fkleon/pybricks-ble). This works while the
-hub program is running and does not need a GATT connection.
-
-1. Deploy the program: `pixi run run`
-2. Wait until it disconnects (or press Ctrl+C after upload finishes)
-3. Drive with arrow keys:
+With the hub program deployed, run the built-in tests (blink light, pulse
+motors, read sensor):
 
 ```sh
-pixi run remote
+pixi run test
 ```
 
-Arrow keys set left/right motor power. Release a key to stop. Press `Q` or `Esc` to quit the remote.
+The test script connects over BLE, uploads the hub program if needed, and then
+drives the hardware through the remote API.
 
-Remote control overrides autonomous driving while keys are held (hub light turns yellow).
-When you release the keys, the robot resumes its normal behavior.
+## Remote API example
 
-**Tip:** Broadcasting works best when the hub is not connected to Pybricks Code or
-`pybricksdev` at the same time.
+```python
+import asyncio
+from pybricks.parameters import Color, Direction, Port
+from hub_client import MoveHub
+
+async def main():
+    async with MoveHub.connect() as hub:
+        motor = hub.motor(Port.A, Direction.CLOCKWISE)
+        sensor = hub.color_distance_sensor(Port.D)
+
+        await hub.light.on(Color.BLUE)
+        await motor.dc(25)
+        await asyncio.sleep(0.3)
+        await motor.stop()
+        print(await sensor.distance())
+
+asyncio.run(main())
+```
+
+## Hub wiring defaults
+
+`pybricks/main.py` maps ports as follows (edit to match your setup):
+
+| Port | Device |
+|------|--------|
+| A | Motor (clockwise) |
+| B | Motor (counter-clockwise) |
+| C | Motor (counter-clockwise) |
+| D | Color/distance sensor |
 
 ## Troubleshooting
 
 - **Hub not found**: Turn the hub on, move it closer, and make sure it is not connected to the Pybricks app or another computer.
 - **Upload fails or disconnects**: Run `pixi run stop`, wait a moment, then try `pixi run run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
-- **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again. The hub may take a few attempts to accept a new BLE connection while a program is running.
-- **Program keeps running**: Pybricksdev has no built-in stop command; use `pixi run stop` instead.
+- **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again.
+- **Passive scan / BleakError on Linux**: Active scanning is used by default. If scanning still fails, ensure Bluetooth is enabled and no other app is using the adapter.
+- **Commands time out**: The Move Hub cannot broadcast while connected over GATT. Run `pixi run run` (which disconnects automatically) or `pixi run stop` before using `pixi run test`. Close Pybricks Code and other BLE connections too.

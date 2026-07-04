@@ -4,13 +4,16 @@ name = "pybricks"
 platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 version = "0.1.0"
 
+[activation]
+env = { PYTHONPATH = "." }
+
 [tasks]
-run = "python scripts/ble_control.py run pybricks/main.py"
+run = "python scripts/ble_control.py run pybricks/main.py --no-wait"
 dev = "pybricksdev run ble pybricks/main.py --stay-connected"
 scan = "python scripts/ble_control.py scan"
 stop = "python scripts/ble_control.py stop"
 download = "python scripts/ble_control.py download pybricks/main.py"
-remote = "python scripts/remote_control.py"
+test = "python scripts/test_hub.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
