@@ -12,8 +12,9 @@ run = "python scripts/ble_control.py run pybricks/main.py --no-wait"
 dev = "pybricksdev run ble pybricks/main.py --stay-connected"
 scan = "python scripts/ble_control.py scan"
 stop = "python scripts/ble_control.py stop"
-download = "python scripts/ble_control.py download pybricks/main.py"
+upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
+starpoint = "python hub_client/starpoint/star_point_main.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"

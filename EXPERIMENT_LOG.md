@@ -186,19 +186,61 @@ Temporary `pybricks/debug_minimal.py` was used for hub-side bisection and then d
 
 - Added `test` task, `PYTHONPATH=.`, deploy `--no-wait` where needed.
 - `pixi run stop`, `pixi run run`, `pixi run test` as primary workflow.
+- Added `starpoint` task (`hub_client/starpoint/star_point_main.py`) for
+  application-level hub control.
 
 ---
 
-## 10. Known limitations (as of end of session)
+## 10. `motor.run_until_stalled` / `motor.stall` (starpoint)
+
+**What we tried**
+
+- Expose `Motor.run_until_stalled()` on the Linux client and dispatch it from
+  `pybricks/main.py`.
+- First attempt used the full Pybricks name and keyword-style wire args:
+  `motor.run_until_stalled B 100 duty_limit=30`.
+- Refactored `handle_command()` to `*args` and `*parts[2:]` to pass optional
+  keyword args.
+
+**Result**
+
+- `pixi run test` still passed; `pixi run starpoint` failed.
+- **Payload too large:** `motor.run_until_stalled B 100 duty_limit=30` encodes
+  to ~48 bytes; `pb_ble` rejects anything over **26 bytes**:
+  `ValueError: Payload too large: 48 bytes (maximum is 26 bytes)`.
+  The limit is in the Pybricks BLE broadcast format (31-byte adv packet minus
+  overhead), not specific to this adapter.
+- **`*args` regression:** Reintroduced the Move Hub `TypeError` from §5 when
+  `handle_command(seq, cmd, *args)` replaced the fixed-arity handler. Reverted
+  to `arg1`–`arg4` and explicit dispatch in the main loop.
+- **Client timeout:** `run_until_stalled` blocks on the hub until the motor
+  stalls; the default 10 s `_CommandSession.call()` timeout is too short.
+  `run_until_stalled` now uses a 120 s timeout.
+
+**Fix**
+
+- Short wire name: `motor.stall` (not `motor.run_until_stalled`).
+- Positional args only: `motor.stall <port> <speed> [<duty_limit>] [<then>]`.
+  Example on the wire: `2 motor.stall B 100 30` (~23 bytes encoded).
+- Hub calls `motor.run_until_stalled(speed, then, duty_limit)` with positional
+  args (no keyword args on MicroPython).
+- `pixi run starpoint` works end-to-end (motor B stalls, returns angle).
+
+---
+
+## 11. Known limitations (as of end of session)
 
 1. **PC cannot observe Pybricks BLE advertisements** on this Intel adapter — hybrid
    transport avoids that requirement.
 2. **Move Hub has no stdin** — GATT stdin/stdout command path is not viable.
 3. **Hub command handler must avoid list/slice function arguments** after device
    init — use string parameters.
-4. README troubleshooting section is partly stale (still mentions disconnect-before-test
+4. **BLE command broadcast is limited to 26 bytes** (Pybricks adv encoding).
+   The full string `<seq> <command> …` must fit; use short wire names and
+   positional args (see §10, `pybricks/main.py` module docstring).
+5. README troubleshooting section is partly stale (still mentions disconnect-before-test
    and active scanning in places); architecture section at top is accurate.
-5. Hub may appear under more than one BLE address over time; use `-n` to target
+6. Hub may appear under more than one BLE address over time; use `-n` to target
    a specific hub if multiple are visible.
 
 ---
@@ -213,4 +255,6 @@ CommandBroadcaster ──BLE ch.7──────►  radio.observe(7) → han
 read_line()        ◄──GATT stdout──  print("<seq> <response>")
 ```
 
-**Verify:** `pixi run test`
+Wire format example: `2 motor.stall B 100 30` (must stay within 26-byte limit).
+
+**Verify:** `pixi run test`, `pixi run starpoint`
