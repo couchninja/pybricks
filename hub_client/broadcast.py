@@ -15,7 +15,7 @@ BlueZBroadcaster = _bluezdbus.BlueZBroadcaster
 PybricksBroadcastAdvertisement = _bluezdbus.PybricksBroadcastAdvertisement
 get_adapter = _bluezdbus.get_adapter
 
-from pb_ble.constants import PybricksBroadcastData
+from pb_ble.constants import PybricksBroadcastData  # noqa: E402
 
 
 class CommandBroadcaster:
