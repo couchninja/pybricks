@@ -122,9 +122,7 @@ class Motor:
         if angle is None:
             await self._session.call(f"motor.reset_angle {self.port.name}")
         else:
-            await self._session.call(
-                f"motor.reset_angle {self.port.name} {int(angle)}"
-            )
+            await self._session.call(f"motor.reset_angle {self.port.name} {int(angle)}")
 
 
 class ColorDistanceSensor:
@@ -156,6 +154,8 @@ class ColorDistanceSensor:
 class MoveHub:
     """Remote Move Hub with Pybricks-like device accessors."""
 
+    _session: _CommandSession
+
     def __init__(self, session: _CommandSession):
         self._session = session
         self.light = HubLight(session)
@@ -186,15 +186,15 @@ class MoveHub:
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
-                async with cls._session(name, program=program, retries=retries) as remote:
+                async with cls._open_session(
+                    name, program=program, retries=retries
+                ) as remote:
                     yield remote
                 return
             except (*RECOVERABLE_ERRORS, HubClientError) as exc:
                 last_error = exc
                 if attempt < retries:
-                    print(
-                        f"Session failed ({exc}); retrying ({attempt}/{retries})..."
-                    )
+                    print(f"Session failed ({exc}); retrying ({attempt}/{retries})...")
                     await asyncio.sleep(2.0)
 
         if last_error is not None:
@@ -203,7 +203,7 @@ class MoveHub:
 
     @classmethod
     @asynccontextmanager
-    async def _session(
+    async def _open_session(
         cls,
         name: str | None,
         *,
