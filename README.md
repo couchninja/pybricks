@@ -43,7 +43,7 @@ Other deploy commands:
 
 ```sh
 pixi run stop       # stop the program on the hub
-pixi run download   # upload without starting
+pixi run upload     # upload without starting
 pixi run dev        # interactive mode: re-upload after edits without reconnecting
 ```
 

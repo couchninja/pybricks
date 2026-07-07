@@ -7,15 +7,35 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from pybricks.parameters import Color, Direction, Port
+from pybricks.parameters import Color, Direction, Port, Stop
 from pybricksdev.connections.pybricks import PybricksHubBLE
 
 from hub_client.ble import RECOVERABLE_ERRORS, connect, disconnect_hub
 from hub_client.broadcast import CommandBroadcaster, open_broadcaster
+from hub_client.constants import COMMAND_CHANNEL
+from hub_client.pb_ble_import import load_bluezdbus
+
+load_bluezdbus()
+from pb_ble.messages import OBSERVED_DATA_MAX_SIZE, encode_message  # noqa: E402
 
 
 class HubClientError(RuntimeError):
     """Raised when the hub returns an error response."""
+
+
+class BroadcastPayloadTooLargeError(HubClientError):
+    """Raised when a command cannot fit in a Pybricks BLE advertisement."""
+
+
+def _ensure_broadcast_fits(message: str) -> None:
+    """Reject commands that exceed the Pybricks BLE advertisement size limit."""
+    try:
+        encode_message(COMMAND_CHANNEL, message)
+    except ValueError as exc:
+        raise BroadcastPayloadTooLargeError(
+            f"command exceeds BLE broadcast limit ({OBSERVED_DATA_MAX_SIZE} bytes): "
+            f"{message!r}"
+        ) from exc
 
 
 def _color_name(color: Color) -> str:
@@ -32,13 +52,17 @@ class _CommandSession:
         self._lock = asyncio.Lock()
         self._seq = 0
 
-    async def call(self, command: str) -> str | int | Color | None:
+    async def call(
+        self, command: str, *, timeout: float = 10.0
+    ) -> str | int | Color | None:
         async with self._lock:
             self._seq += 1
             seq = str(self._seq)
-            await self._broadcaster.broadcast(f"{seq} {command}")
+            wire_message = f"{seq} {command}"
+            _ensure_broadcast_fits(wire_message)
+            await self._broadcaster.broadcast(wire_message)
 
-            deadline = time.monotonic() + 10.0
+            deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 try:
                     line = (await self._ble_hub.read_line()).strip()
@@ -49,7 +73,18 @@ class _CommandSession:
                 if line.startswith("\x06"):
                     line = line[1:].strip()
                 if line.startswith("Traceback"):
-                    raise HubClientError("hub program error (see hub output)")
+                    lines = [line]
+                    while time.monotonic() < deadline:
+                        try:
+                            next_line = (await self._ble_hub.read_line()).strip()
+                        except Exception:
+                            break
+                        if not next_line:
+                            break
+                        lines.append(next_line)
+                    raise HubClientError(
+                        "hub program error:\n" + "\n".join(lines)
+                    )
 
                 parts = line.split(None, 1)
                 if not parts or parts[0] != seq:
@@ -97,32 +132,73 @@ class Motor:
         self.positive_direction = positive_direction
 
     async def dc(self, duty: int | float) -> None:
-        await self._session.call(f"motor.dc {self.port.name} {int(duty)}")
+        await self._session.call(f"mtr.dc {self.port.name} {int(duty)}")
 
     async def run(self, speed: int | float) -> None:
-        await self._session.call(f"motor.run {self.port.name} {int(speed)}")
+        await self._session.call(f"mtr.run {self.port.name} {int(speed)}")
 
     async def stop(self) -> None:
-        await self._session.call(f"motor.stop {self.port.name}")
+        await self._session.call(f"mtr.stop {self.port.name}")
 
     async def brake(self) -> None:
-        await self._session.call(f"motor.brake {self.port.name}")
+        await self._session.call(f"mtr.brake {self.port.name}")
 
     async def angle(self) -> int:
-        result = await self._session.call(f"motor.angle {self.port.name}")
+        result = await self._session.call(f"mtr.angle {self.port.name}")
         assert isinstance(result, int)
         return result
 
     async def speed(self) -> int:
-        result = await self._session.call(f"motor.speed {self.port.name}")
+        result = await self._session.call(f"mtr.speed {self.port.name}")
         assert isinstance(result, int)
         return result
 
     async def reset_angle(self, angle: int | None = None) -> None:
         if angle is None:
-            await self._session.call(f"motor.reset_angle {self.port.name}")
+            await self._session.call(f"mtr.rset {self.port.name}")
         else:
-            await self._session.call(f"motor.reset_angle {self.port.name} {int(angle)}")
+            await self._session.call(f"mtr.rset {self.port.name} {int(angle)}")
+
+    async def run_angle(
+        self,
+        speed: int | float,
+        rotation_angle: int | float,
+        then: Stop = Stop.HOLD,
+    ) -> None:
+        parts = [
+            f"mtr.rang {self.port.name} {int(speed)} {int(rotation_angle)}"
+        ]
+        if then != Stop.HOLD:
+            parts.append(then.name)
+        await self._session.call(" ".join(parts), timeout=120.0)
+
+    async def run_target(
+        self,
+        speed: int | float,
+        target_angle: int | float,
+        then: Stop = Stop.HOLD,
+    ) -> None:
+        parts = [
+            f"mtr.rtgt {self.port.name} {int(speed)} {int(target_angle)}"
+        ]
+        if then != Stop.HOLD:
+            parts.append(then.name)
+        await self._session.call(" ".join(parts), timeout=120.0)
+
+    async def run_until_stalled(
+        self,
+        speed: int | float,
+        then: Stop = Stop.COAST,
+        duty_limit: int | float | None = None,
+    ) -> int:
+        parts = [f"mtr.stall {self.port.name} {int(speed)}"]
+        if duty_limit is not None:
+            parts.append(str(int(duty_limit)))
+        if then != Stop.COAST:
+            parts.append(then.name)
+        result = await self._session.call(" ".join(parts), timeout=120.0)
+        assert isinstance(result, int)
+        return result
 
 
 class ColorDistanceSensor:
@@ -191,6 +267,8 @@ class MoveHub:
                 ) as remote:
                     yield remote
                 return
+            except BroadcastPayloadTooLargeError:
+                raise
             except (*RECOVERABLE_ERRORS, HubClientError) as exc:
                 last_error = exc
                 if attempt < retries:

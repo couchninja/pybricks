@@ -1,0 +1,20 @@
+---
+description: Default guidelines
+globs: *
+alwaysApply: true
+---
+- Prefer functions/modules over classes; use classes only when needed.
+- No Python files in root.
+- Tests in tests/, extend existing test files when possible.
+- Minimal `__init__.py`; use direct module imports (e.g. `from similarity.mesh.generation import create_cube`), not re-exports.
+- Document only when it adds value; skip when code is self-explanatory.
+- Run everything with `pixi run`.
+- Tests and temp scripts in tests/ only; clean up temp files after use.
+- On git commit request: suggest message, let user edit before committing.
+- End every text file with a newline.
+- No runtime checks for pixi-installed libs.
+- Don't reraise exceptions.
+- No command line arguments for python files.
+- Order methods: global → low-level.
+- Imports at top of file only.
+- Prefer runtime exceptions over fallbacks/graceful degradation.

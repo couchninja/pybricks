@@ -2,11 +2,21 @@
 
 Commands arrive on COMMAND_CHANNEL via BLERadio. Responses go to stdout
 (GATT) so the host can read them without BLE scanning.
+
+BLE broadcast payload limit
+---------------------------
+The host sends commands as a single BLE advertisement string (seq + command).
+Pybricks encoding allows at most **26 bytes** total (channel byte + payload).
+Long command names or keyword-style args will fail on the PC before the hub
+sees them (``ValueError: Payload too large`` from ``pb_ble``).
+
+Keep wire names short and use positional args, e.g. ``mtr.stall B 100 30``
+not ``motor.run_until_stalled B 100 duty_limit=30``. See EXPERIMENT_LOG.md §10.
 """
 
 from pybricks.hubs import MoveHub
 from pybricks.messaging import BLERadio
-from pybricks.parameters import Color, Direction, Port
+from pybricks.parameters import Color, Direction, Port, Stop
 from pybricks.pupdevices import ColorDistanceSensor, Motor
 from pybricks.tools import wait
 
@@ -60,7 +70,13 @@ def command_line(cmd):
     return str(cmd)
 
 
-def handle_command(seq, cmd, arg1="", arg2=""):
+def parse_stop(value):
+    if value in ("COAST", "BRAKE", "HOLD"):
+        return Stop[value]
+    return None
+
+
+def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4=""):
     # Move Hub MicroPython can raise TypeError when list slices are passed as
     # function arguments after motors/sensors are initialized.
     seq = str(seq)
@@ -81,7 +97,7 @@ def handle_command(seq, cmd, arg1="", arg2=""):
             reply(seq, "ok")
             return
 
-        if cmd.startswith("motor."):
+        if cmd.startswith("mtr."):
             port = arg1
             motor = motors[port]
             action = cmd.split(".", 1)[1]
@@ -100,11 +116,40 @@ def handle_command(seq, cmd, arg1="", arg2=""):
             elif action == "speed":
                 reply(seq, "val " + str(motor.speed()))
                 return
-            elif action == "reset_angle":
+            elif action in ("rset", "reset_angle"):
+                motor.stop()
                 if arg2:
                     motor.reset_angle(parse_int(arg2))
                 else:
                     motor.reset_angle()
+            elif action == "rang":
+                speed = parse_int(arg2)
+                rotation_angle = parse_int(arg3)
+                then = parse_stop(arg4) or Stop.HOLD
+                motor.run_angle(speed, rotation_angle, then)
+            elif action == "rtgt":
+                speed = parse_int(arg2)
+                target_angle = parse_int(arg3)
+                then = parse_stop(arg4) or Stop.HOLD
+                motor.run_target(speed, target_angle, then)
+            elif action == "stall":
+                speed = parse_int(arg2)
+                then = Stop.COAST
+                duty_limit = None
+                stop = parse_stop(arg3)
+                if stop is not None:
+                    then = stop
+                elif arg3:
+                    duty_limit = parse_int(arg3)
+                stop = parse_stop(arg4)
+                if stop is not None:
+                    then = stop
+                if duty_limit is not None:
+                    angle = motor.run_until_stalled(speed, then, duty_limit)
+                else:
+                    angle = motor.run_until_stalled(speed, then)
+                reply(seq, "val " + str(angle))
+                return
             else:
                 reply(seq, "err unknown motor command")
                 return
@@ -162,7 +207,11 @@ while True:
         wait(10)
         continue
 
-    if len(parts) > 3:
+    if len(parts) > 5:
+        handle_command(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5])
+    elif len(parts) > 4:
+        handle_command(parts[0], parts[1], parts[2], parts[3], parts[4])
+    elif len(parts) > 3:
         handle_command(parts[0], parts[1], parts[2], parts[3])
     elif len(parts) > 2:
         handle_command(parts[0], parts[1], parts[2])
