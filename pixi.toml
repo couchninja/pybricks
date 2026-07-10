@@ -29,7 +29,8 @@ pybricksdev = "==2.3.2"
 pybricks-ble = { git = "https://github.com/fkleon/pybricks-ble.git" }
 dbus-fast = ">=5.0"
 trimesh = ">=4.0"
-pyglet = "<2.0"
+scipy = ">=1.18.0"
+pyglet = ">=1.5.31,<2.0"
 
 # pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
 # override, pixi cannot install pybricks 4.0.0 from PyPI alongside pybricks-ble.
