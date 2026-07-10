@@ -15,6 +15,7 @@ stop = "python scripts/ble_control.py stop"
 upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
+cube = "python tests/visualize_cube.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
@@ -27,6 +28,8 @@ pybricksdev = "==2.3.2"
 # Broadcast/observe helpers; pins pybricks 3.6.1 via git (see override below).
 pybricks-ble = { git = "https://github.com/fkleon/pybricks-ble.git" }
 dbus-fast = ">=5.0"
+trimesh = ">=4.0"
+pyglet = "<2.0"
 
 # pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
 # override, pixi cannot install pybricks 4.0.0 from PyPI alongside pybricks-ble.
