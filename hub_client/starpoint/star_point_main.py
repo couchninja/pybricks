@@ -4,10 +4,12 @@ import asyncio
 from hub_client import MoveHub
 
 
-async def star_point_main():
+async def star_point_main(upload_program: bool = False):
     print("Star point main")
 
-    async with MoveHub.connect() as hub:
+    async with MoveHub.connect(
+        program="pybricks/main.py" if upload_program else None
+    ) as hub:
         await hub.ping()
         print("Hub responded to ping.")
 
@@ -21,7 +23,7 @@ async def star_point_main():
         print(f"Motor stalled at angle {angle * gear_ratio} degrees.")
 
         # Define the stall point as zero
-        await motor.reset_angle(0)
+        await motor.reset_angle(20)
 
         while True:
             await motor.run_target(1200, target_angle=-90 / gear_ratio)
@@ -36,4 +38,4 @@ async def star_point_main():
 
 
 if __name__ == "__main__":
-    asyncio.run(star_point_main())
+    asyncio.run(star_point_main(upload_program=False))
