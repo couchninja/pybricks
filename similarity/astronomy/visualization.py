@@ -16,6 +16,8 @@ Camera note: Trimesh's default z_near is 0.01 AU. Exaggerated Earth is much smal
 zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU).
 """
 
+import pyglet
+
 import numpy as np
 import trimesh
 from astropy.time import Time
@@ -225,7 +227,17 @@ class _EarthCenteredViewer(SceneViewer):
         scene.set_camera(center=self._earth_center, distance=camera_distance)
         scene.camera.z_near = CAMERA_Z_NEAR_AU
         scene.camera.z_far = CAMERA_Z_FAR_AU
+
+        # Without this, the viewer will show a black screen until any mouse or keyboard input.
+        kwargs["start_loop"] = False
         super().__init__(scene, **kwargs)
+        for _ in range(2):
+            pyglet.clock.tick()
+            self.switch_to()
+            self.dispatch_events()
+            self.dispatch_event("on_draw")
+            self.flip()
+        pyglet.app.run()
 
     def reset_view(self, flags=None):
         self.view = {
