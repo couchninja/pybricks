@@ -13,7 +13,9 @@ default offset visibly displaces orbit lines while meshes (sun, earth) stay put.
 offset_lines=False so orbit paths align with the bodies they describe.
 
 Camera note: Trimesh's default z_near is 0.01 AU. Exaggerated Earth is much smaller, so
-zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU).
+zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU). At true scale
+z_near would be tiny relative to z_far (galactic extent), which exceeds OpenGL depth
+precision; z_near is clamped by MAX_DEPTH_RATIO.
 """
 
 import pyglet
@@ -42,17 +44,17 @@ from similarity.astronomy.ephemeris import (
 REAL_SUN_RADIUS_AU = 695_700 / 149_597_870.7
 REAL_EARTH_RADIUS_AU = 6_371 / 149_597_870.7
 
-SUN_SIZE_EXAGGERATION = 20
-EARTH_SIZE_EXAGGERATION = 20
-# SUN_SIZE_EXAGGERATION = 1
-# EARTH_SIZE_EXAGGERATION = 1
+# SUN_SIZE_EXAGGERATION = 20
+# EARTH_SIZE_EXAGGERATION = 20
+SUN_SIZE_EXAGGERATION = 1
+EARTH_SIZE_EXAGGERATION = 1
 
 SUN_RADIUS_AU = REAL_SUN_RADIUS_AU * SUN_SIZE_EXAGGERATION
 EARTH_RADIUS_AU = REAL_EARTH_RADIUS_AU * EARTH_SIZE_EXAGGERATION
 
 AXIS_HALF_LENGTH_EARTH_RADII = 2.8
 NETHERLANDS_MARKER_EARTH_RADII = 0.16
-LINE_RADIUS_EARTH_RADII = 0.06
+LINE_RADIUS_EARTH_DIAMETERS = 0.03
 CAMERA_DISTANCE_EARTH_RADII = 80
 GALACTIC_ORBIT_VISUAL_RADIUS_AU = 150.0
 GALACTIC_AXIS_HALF_LENGTH_AU = 170.0
@@ -61,8 +63,13 @@ GALACTIC_LINE_RADIUS_AU = SUN_RADIUS_AU * 0.4
 
 # Default Trimesh z_near is 0.01 AU, larger than exaggerated Earth (~0.0009 AU).
 CAMERA_Z_NEAR_EARTH_RADII = 0.01
-CAMERA_Z_NEAR_AU = EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII
 CAMERA_Z_FAR_AU = GALACTIC_AXIS_HALF_LENGTH_AU * 2
+# gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
+MAX_DEPTH_RATIO = 5e7
+CAMERA_Z_NEAR_AU = max(
+    EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII,
+    CAMERA_Z_FAR_AU / MAX_DEPTH_RATIO,
+)
 
 ORBIT_COLOR = [180, 180, 200, 255]
 SUN_COLOR = [255, 210, 60, 255]
@@ -189,7 +196,10 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     )
     scene.add_geometry(
         _line_mesh(
-            axis_start, axis_end, LINE_RADIUS_EARTH_RADII * EARTH_RADIUS_AU, AXIS_COLOR
+            axis_start,
+            axis_end,
+            LINE_RADIUS_EARTH_DIAMETERS * 2 * EARTH_RADIUS_AU,
+            AXIS_COLOR,
         ),
         geom_name="earth_axis",
         node_name="earth_axis",
@@ -271,10 +281,12 @@ def _line_mesh(
     end = np.asarray(end, dtype=float)
     direction = end - start
     length = np.linalg.norm(direction)
-    cylinder = trimesh.creation.cylinder(radius=radius, height=length, sections=10)
     direction /= length
     rotation = Rotation.align_vectors([direction], [np.array([0.0, 0.0, 1.0])])[0]
-    transform = _transform_matrix(rotation.as_matrix(), (start + end) / 2)
+    # Build at unit size then scale; trimesh drops faces on AU-scale cylinders.
+    cylinder = trimesh.creation.cylinder(radius=1.0, height=1.0, sections=10)
+    scale = np.diag([radius, radius, length, 1.0])
+    transform = _transform_matrix(rotation.as_matrix(), (start + end) / 2) @ scale
     cylinder.apply_transform(transform)
     return _color_mesh(cylinder, color)
 
