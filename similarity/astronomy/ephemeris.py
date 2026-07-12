@@ -4,6 +4,7 @@ from astropy.coordinates import (
     BarycentricMeanEcliptic,
     EarthLocation,
     GCRS,
+    Galactocentric,
     ITRS,
     SkyCoord,
     get_body_barycentric,
@@ -49,6 +50,47 @@ def earth_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
     earth = get_body_barycentric("earth", time)
     sun = get_body_barycentric("sun", time)
     return _heliocentric_ecliptic_au(earth, sun)
+
+
+def sun_galactocentric_kpc(time: Time) -> np.ndarray:
+    sun = get_body_barycentric("sun", time)
+    galactic = SkyCoord(
+        sun,
+        representation_type="cartesian",
+        frame="icrs",
+    ).transform_to(Galactocentric())
+    cartesian = galactic.cartesian
+    return np.array(
+        [
+            cartesian.x.to_value(u.kpc),
+            cartesian.y.to_value(u.kpc),
+            cartesian.z.to_value(u.kpc),
+        ],
+        dtype=float,
+    )
+
+
+def sun_galactic_orbit_kpc(time: Time, samples: int = 360) -> np.ndarray:
+    sun_position = sun_galactocentric_kpc(time)
+    radius = np.hypot(sun_position[0], sun_position[1])
+    theta = np.linspace(0, 2 * np.pi, samples, endpoint=False)
+    return np.column_stack(
+        [
+            radius * np.cos(theta),
+            radius * np.sin(theta),
+            np.zeros(samples, dtype=float),
+        ]
+    )
+
+
+def ecliptic_to_galactocentric_rotation(time: Time) -> np.ndarray:
+    return np.column_stack(
+        [
+            _ecliptic_direction_galactocentric(np.array([1.0, 0.0, 0.0]), time),
+            _ecliptic_direction_galactocentric(np.array([0.0, 1.0, 0.0]), time),
+            _ecliptic_direction_galactocentric(np.array([0.0, 0.0, 1.0]), time),
+        ]
+    )
 
 
 def earth_spin_axis_ecliptic(time: Time) -> np.ndarray:
@@ -105,6 +147,23 @@ def _heliocentric_ecliptic_au(earth, sun) -> np.ndarray:
         ],
         dtype=float,
     )
+
+
+def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.ndarray:
+    sun_galactic = sun_galactocentric_kpc(time)
+    ecliptic = BarycentricMeanEcliptic(
+        x=vector[0] * u.kpc,
+        y=vector[1] * u.kpc,
+        z=vector[2] * u.kpc,
+        representation_type="cartesian",
+    )
+    gcrs = ecliptic.transform_to(GCRS(obstime=time))
+    galactic = SkyCoord(gcrs, representation_type="cartesian").transform_to(
+        Galactocentric()
+    )
+    direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
+    direction -= sun_galactic
+    return direction / np.linalg.norm(direction)
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
