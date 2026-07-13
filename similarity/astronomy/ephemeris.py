@@ -46,6 +46,19 @@ def earth_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
     )
 
 
+def earth_year_boundary_positions_ecliptic_au(time: Time) -> np.ndarray:
+    start = time - 0.5 * u.year
+    end = time + 0.5 * u.year
+    start_year = int(np.floor(start.decimalyear))
+    end_year = int(np.ceil(end.decimalyear))
+    positions = []
+    for year in range(start_year, end_year + 1):
+        boundary = Time(f"{year}-01-01", scale=time.scale, format="iso")
+        if start <= boundary < end:
+            positions.append(earth_heliocentric_ecliptic_au(boundary))
+    return np.array(positions, dtype=float)
+
+
 def earth_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
     earth = get_body_barycentric("earth", time)
     sun = get_body_barycentric("sun", time)
