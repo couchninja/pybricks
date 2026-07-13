@@ -40,8 +40,8 @@ from trimesh.visual.color import ColorVisuals
 from trimesh.viewer.trackball import Trackball
 from trimesh.viewer.windowed import SceneViewer
 
-from similarity.astronomy.earth_mesh import create_earth
-from similarity.astronomy.ephemeris import (
+from simulate.astronomy.utils.earth_mesh import create_earth
+from simulate.astronomy.utils.ephemeris import (
     current_time,
     earth_heliocentric_ecliptic_au,
     earth_orbit_ecliptic_au,
@@ -701,3 +701,10 @@ def _color_mesh(mesh: trimesh.Trimesh, color: list[int]) -> trimesh.Trimesh:
         raise TypeError("mesh must use ColorVisuals")
     visual.face_colors = np.asarray(color, dtype=np.uint8)
     return mesh
+
+
+if __name__ == "__main__":
+    # show_earth_sun()
+    # show_earth_sun(time_scaling=86_400)  # 1 day per second
+    # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
+    show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
