@@ -35,7 +35,9 @@ async def cmd_scan(_: argparse.Namespace) -> None:
         print(f"  {name}  {address}")
     if not found:
         print("No Pybricks hubs found.")
-        print("Make sure the hub is on, running Pybricks firmware, and not connected elsewhere.")
+        print(
+            "Make sure the hub is on, running Pybricks firmware, and not connected elsewhere."
+        )
 
 
 async def cmd_stop(args: argparse.Namespace) -> None:
@@ -64,7 +66,9 @@ async def cmd_run(args: argparse.Namespace) -> None:
         except RECOVERABLE_ERRORS as exc:
             last_error = exc
             if attempt < args.retries:
-                print(f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})...")
+                print(
+                    f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})..."
+                )
                 await asyncio.sleep(2.0)
         finally:
             if hub is not None:
@@ -96,7 +100,9 @@ async def cmd_download(args: argparse.Namespace) -> None:
         except RECOVERABLE_ERRORS as exc:
             last_error = exc
             if attempt < args.retries:
-                print(f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})...")
+                print(
+                    f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})..."
+                )
                 await asyncio.sleep(2.0)
         finally:
             if hub is not None:
