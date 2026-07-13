@@ -1,8 +1,9 @@
 """Earth-sun and Milky Way visualization.
 
 Scene graph:
-  world -> milky_way (galactic center, axis, sun's galactic orbit)
-         -> solar_system (sun at origin, earth and earth orbit in ecliptic coords)
+  world -> earth_view (translates so earth stays at the origin)
+         -> milky_way (galactic center, axis, sun's galactic orbit)
+                -> solar_system (sun at origin, earth and earth orbit in ecliptic coords)
 
 Galactic kpc positions come from ephemeris at true scale, then multiplied by
 GALACTIC_ORBIT_DISTANCE_SCALE after kpc->AU conversion (1 = true scale; solar-system
@@ -18,6 +19,9 @@ zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU). z_n
 clamped by MAX_DEPTH_RATIO and OPENGL_Z_NEAR_MIN_AU because gluPerspective rejects
 smaller near planes on macOS.
 """
+
+from time import perf_counter
+from typing import Literal, TypedDict, overload
 
 import pyglet
 
@@ -61,7 +65,17 @@ AXIS_HALF_LENGTH_EARTH_RADII = 2.8
 NETHERLANDS_MARKER_EARTH_RADII = 0.16
 LINE_RADIUS_EARTH_DIAMETERS = 0.03
 CAMERA_DISTANCE_EARTH_RADII = 80
-GALACTIC_ORBIT_DISTANCE_SCALE = 1e-8
+AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION = (
+    AXIS_HALF_LENGTH_EARTH_RADII / CAMERA_DISTANCE_EARTH_RADII
+)
+AXIS_RADIUS_CAMERA_DISTANCE_FRACTION = (
+    LINE_RADIUS_EARTH_DIAMETERS * 2 / CAMERA_DISTANCE_EARTH_RADII
+)
+AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS = 2
+# Pan/zoom sensitivity; keep near the solar-system scale, not galactic bounds.
+TRACKBALL_SCALE_AU = 2.0
+# GALACTIC_ORBIT_DISTANCE_SCALE = 1e-8
+GALACTIC_ORBIT_DISTANCE_SCALE = 1e-9
 GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION = 0.05
 GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
 GALACTIC_LINE_RADIUS_ORBIT_FRACTION = 0.0005
@@ -92,6 +106,29 @@ GALACTIC_CENTER_COLOR = [240, 200, 255, 255]
 
 MILKY_WAY_FRAME = "milky_way"
 SOLAR_SYSTEM_FRAME = "solar_system"
+EARTH_VIEW_FRAME = "earth_view"
+EARTH_VIEW_ORIGIN = np.zeros(3)
+
+ANIMATION_DAYS_PER_SECOND = 10
+ANIMATION_CALLBACK_PERIOD = 1.0 / 60.0
+ORBIT_UPDATE_INTERVAL = 1 * u.day
+
+
+class EarthSunState(TypedDict):
+    earth_position: np.ndarray
+    earth_rotation: np.ndarray
+    spin_axis: np.ndarray
+    netherlands_position: np.ndarray
+    galactic_rotation: np.ndarray
+    sun_galactic_position: np.ndarray
+    galactic_axis_half_length_au: float
+    galactic_center_radius_au: float
+    galactic_line_radius_au: float
+
+
+class EarthSunStateWithOrbit(EarthSunState):
+    orbit: np.ndarray
+    galactic_orbit: np.ndarray
 
 
 def show_earth_sun(time: Time | None = None) -> None:
@@ -99,15 +136,16 @@ def show_earth_sun(time: Time | None = None) -> None:
         time = current_time()
 
     scene = build_earth_sun_scene(time)
-    earth_transform, _ = scene.graph.get("earth", "world")
-    earth_position = earth_transform[:3, 3]
-    scene.apply_translation(-earth_position)
+    scene.set_camera(
+        center=EARTH_VIEW_ORIGIN,
+        distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
+    )
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
         viewer=_EarthCenteredViewer,
-        earth_center=np.zeros(3),
         camera_distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
         offset_lines=False,
+        start_time=time,
     )
 
 
@@ -115,39 +153,22 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     if time is None:
         time = current_time()
 
-    earth_position = earth_heliocentric_ecliptic_au(time)
-    orbit = earth_orbit_ecliptic_au(time)
-    spin_axis = earth_spin_axis_ecliptic(time)
-    netherlands_dir = netherlands_direction_ecliptic(time)
-    earth_rotation = earth_orientation_matrix(time)
-
-    sun_galactic_kpc = sun_galactocentric_kpc(time)
-    sun_galactic_distance_kpc = np.linalg.norm(sun_galactic_kpc)
-    galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
-    sun_galactic_distance_au = sun_galactic_distance_kpc * galactic_scale
-    sun_galactic_position = sun_galactic_kpc * galactic_scale
-    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
-    galactic_orbit = sun_galactic_orbit_kpc(time) * galactic_scale
-    galactic_axis_half_length_au = (
-        sun_galactic_distance_au * GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION
-    )
-    galactic_center_radius_au = (
-        sun_galactic_distance_au * GALACTIC_CENTER_RADIUS_ORBIT_FRACTION
-    )
-    galactic_line_radius_au = (
-        sun_galactic_distance_au * GALACTIC_LINE_RADIUS_ORBIT_FRACTION
-    )
-
+    state = _earth_sun_state(time)
     scene = trimesh.Scene()
-    scene.graph.update(MILKY_WAY_FRAME, "world", matrix=np.eye(4))
+    scene.graph.update(EARTH_VIEW_FRAME, "world", matrix=np.eye(4))
+    scene.graph.update(MILKY_WAY_FRAME, EARTH_VIEW_FRAME, matrix=np.eye(4))
     scene.graph.update(
         SOLAR_SYSTEM_FRAME,
         MILKY_WAY_FRAME,
-        matrix=_transform_matrix(galactic_rotation, sun_galactic_position),
+        matrix=_transform_matrix(
+            state["galactic_rotation"], state["sun_galactic_position"]
+        ),
     )
 
     galactic_center = _color_mesh(
-        trimesh.creation.icosphere(radius=galactic_center_radius_au, subdivisions=3),
+        trimesh.creation.icosphere(
+            radius=state["galactic_center_radius_au"], subdivisions=3
+        ),
         GALACTIC_CENTER_COLOR,
     )
     scene.add_geometry(
@@ -157,7 +178,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         parent_node_name=MILKY_WAY_FRAME,
     )
 
-    galactic_orbit_path = trimesh.load_path(galactic_orbit)
+    galactic_orbit_path = trimesh.load_path(state["galactic_orbit"])
     galactic_orbit_path.colors = np.tile(
         GALACTIC_ORBIT_COLOR, (len(galactic_orbit_path.entities), 1)
     )
@@ -170,9 +191,9 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
 
     scene.add_geometry(
         _line_mesh(
-            np.array([0.0, 0.0, -galactic_axis_half_length_au]),
-            np.array([0.0, 0.0, galactic_axis_half_length_au]),
-            galactic_line_radius_au,
+            np.array([0.0, 0.0, -state["galactic_axis_half_length_au"]]),
+            np.array([0.0, 0.0, state["galactic_axis_half_length_au"]]),
+            state["galactic_line_radius_au"],
             GALACTIC_AXIS_COLOR,
         ),
         geom_name="galactic_axis",
@@ -194,13 +215,13 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     earth = create_earth(EARTH_RADIUS_AU)
     scene.add_geometry(
         earth,
-        transform=_transform_matrix(earth_rotation, earth_position),
+        transform=_transform_matrix(state["earth_rotation"], state["earth_position"]),
         geom_name="earth",
         node_name="earth",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
-    orbit_path = trimesh.load_path(orbit)
+    orbit_path = trimesh.load_path(state["orbit"])
     orbit_path.colors = np.tile(ORBIT_COLOR, (len(orbit_path.entities), 1))
     scene.add_geometry(
         orbit_path,
@@ -209,25 +230,13 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
-    axis_start = (
-        earth_position - spin_axis * AXIS_HALF_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
-    )
-    axis_end = (
-        earth_position + spin_axis * AXIS_HALF_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
-    )
     scene.add_geometry(
-        _line_mesh(
-            axis_start,
-            axis_end,
-            LINE_RADIUS_EARTH_DIAMETERS * 2 * EARTH_RADIUS_AU,
-            AXIS_COLOR,
-        ),
+        _earth_axis_mesh(state, CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU),
         geom_name="earth_axis",
         node_name="earth_axis",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
-    netherlands_position = earth_position + netherlands_dir * EARTH_RADIUS_AU
     netherlands_marker = _color_mesh(
         trimesh.creation.icosphere(
             radius=NETHERLANDS_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
@@ -237,38 +246,104 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     )
     scene.add_geometry(
         netherlands_marker,
-        transform=_transform_matrix(np.eye(3), netherlands_position),
+        transform=_transform_matrix(np.eye(3), state["netherlands_position"]),
         geom_name="netherlands",
         node_name="netherlands",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
+    _sync_earth_view_frame(scene, state)
     return scene
+
+
+def update_earth_sun_scene(
+    scene: trimesh.Scene,
+    time: Time,
+    last_orbit_time: Time | None,
+    camera_distance_au: float,
+) -> Time:
+    state = _earth_sun_state(time, include_orbit=False)
+    scene.graph.update(
+        SOLAR_SYSTEM_FRAME,
+        MILKY_WAY_FRAME,
+        matrix=_transform_matrix(
+            state["galactic_rotation"], state["sun_galactic_position"]
+        ),
+    )
+    scene.graph.update(
+        "earth",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_transform_matrix(state["earth_rotation"], state["earth_position"]),
+    )
+    scene.graph.update(
+        "netherlands",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_transform_matrix(np.eye(3), state["netherlands_position"]),
+    )
+    scene.geometry["earth_axis"] = _earth_axis_mesh(state, camera_distance_au)
+    _sync_earth_view_frame(scene, state)
+
+    if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
+        orbit_state = _earth_sun_state(time, include_orbit=True)
+        orbit_path = trimesh.load_path(orbit_state["orbit"])
+        orbit_path.colors = np.tile(ORBIT_COLOR, (len(orbit_path.entities), 1))
+        scene.geometry["orbit"] = orbit_path
+
+        galactic_orbit_path = trimesh.load_path(orbit_state["galactic_orbit"])
+        galactic_orbit_path.colors = np.tile(
+            GALACTIC_ORBIT_COLOR, (len(galactic_orbit_path.entities), 1)
+        )
+        scene.geometry["galactic_orbit"] = galactic_orbit_path
+        return time
+
+    return last_orbit_time
 
 
 class _EarthCenteredViewer(SceneViewer):
     def __init__(
         self,
         scene: trimesh.Scene,
-        earth_center: np.ndarray,
         camera_distance: float,
+        start_time: Time,
         **kwargs,
     ):
-        self._earth_center = np.asarray(earth_center, dtype=float)
-        scene.set_camera(center=self._earth_center, distance=camera_distance)
+        self._start_time = start_time
+        self._last_orbit_time: Time | None = None
+        scene.set_camera(center=EARTH_VIEW_ORIGIN, distance=camera_distance)
         scene.camera.z_near = CAMERA_Z_NEAR_AU
         scene.camera.z_far = CAMERA_Z_FAR_AU
 
         # Without this, the viewer will show a black screen until any mouse or keyboard input.
         kwargs["start_loop"] = False
+        kwargs["callback"] = self._animate
+        kwargs["callback_period"] = ANIMATION_CALLBACK_PERIOD
+        kwargs["caption"] = f"Earth-sun ({start_time.iso})"
         super().__init__(scene, **kwargs)
-        for _ in range(2):
-            pyglet.clock.tick()
-            self.switch_to()
-            self.dispatch_events()
-            self.dispatch_event("on_draw")
-            self.flip()
+        self._animation_start = perf_counter()
+        pyglet.clock.schedule_once(self._initial_draw, 0)
         pyglet.app.run()
+
+    def on_show(self) -> None:
+        self.activate()
+
+    def _initial_draw(self, _dt: float) -> None:
+        self.activate()
+        self.switch_to()
+        if self.width > 0 and self.height > 0:
+            self.dispatch_event("on_resize", self.width, self.height)
+        self.dispatch_event("on_draw")
+        self.flip()
+
+    def _animate(self, scene: trimesh.Scene) -> None:
+        elapsed = perf_counter() - self._animation_start
+        time = self._start_time + elapsed * ANIMATION_DAYS_PER_SECOND * u.day
+        self._last_orbit_time = update_earth_sun_scene(
+            scene,
+            time,
+            self._last_orbit_time,
+            _camera_distance_au(scene),
+        )
+        self.set_caption(f"Earth-sun ({time.iso})")
 
     def reset_view(self, flags=None):
         self.view = {
@@ -280,8 +355,8 @@ class _EarthCenteredViewer(SceneViewer):
             "ball": Trackball(
                 pose=self._initial_camera_transform,
                 size=self.scene.camera.resolution,
-                scale=self.scene.scale,
-                target=self._earth_center,
+                scale=TRACKBALL_SCALE_AU,
+                target=EARTH_VIEW_ORIGIN,
             ),
         }
         self.scene.camera_transform = self.view["ball"].pose
@@ -290,6 +365,96 @@ class _EarthCenteredViewer(SceneViewer):
                 if key in self.view:
                     self.view[key] = value
             self.update_flags()
+
+
+@overload
+def _earth_sun_state(
+    time: Time, *, include_orbit: Literal[True] = True
+) -> EarthSunStateWithOrbit: ...
+
+
+@overload
+def _earth_sun_state(
+    time: Time, *, include_orbit: Literal[False]
+) -> EarthSunState: ...
+
+
+def _earth_sun_state(time: Time, *, include_orbit: bool = True) -> EarthSunState | EarthSunStateWithOrbit:
+    earth_position = earth_heliocentric_ecliptic_au(time)
+    spin_axis = earth_spin_axis_ecliptic(time)
+    netherlands_dir = netherlands_direction_ecliptic(time)
+
+    sun_galactic_kpc = sun_galactocentric_kpc(time)
+    sun_galactic_distance_kpc = np.linalg.norm(sun_galactic_kpc)
+    galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
+    sun_galactic_distance_au = sun_galactic_distance_kpc * galactic_scale
+    sun_galactic_position = sun_galactic_kpc * galactic_scale
+
+    state: EarthSunState = {
+        "earth_position": earth_position,
+        "earth_rotation": earth_orientation_matrix(time),
+        "spin_axis": spin_axis,
+        "netherlands_position": earth_position + netherlands_dir * EARTH_RADIUS_AU,
+        "galactic_rotation": ecliptic_to_galactocentric_rotation(time),
+        "sun_galactic_position": sun_galactic_position,
+        "galactic_axis_half_length_au": (
+            sun_galactic_distance_au * GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION
+        ),
+        "galactic_center_radius_au": (
+            sun_galactic_distance_au * GALACTIC_CENTER_RADIUS_ORBIT_FRACTION
+        ),
+        "galactic_line_radius_au": (
+            sun_galactic_distance_au * GALACTIC_LINE_RADIUS_ORBIT_FRACTION
+        ),
+    }
+    if include_orbit:
+        orbit_state: EarthSunStateWithOrbit = {
+            **state,
+            "orbit": earth_orbit_ecliptic_au(time),
+            "galactic_orbit": sun_galactic_orbit_kpc(time) * galactic_scale,
+        }
+        return orbit_state
+    return state
+
+
+def _earth_world_position(state: EarthSunState) -> np.ndarray:
+    solar_system = _transform_matrix(
+        state["galactic_rotation"], state["sun_galactic_position"]
+    )
+    earth = _transform_matrix(state["earth_rotation"], state["earth_position"])
+    return (solar_system @ earth)[:3, 3]
+
+
+def _sync_earth_view_frame(scene: trimesh.Scene, state: EarthSunState) -> None:
+    earth_world = _earth_world_position(state)
+    scene.graph.update(
+        frame_to=EARTH_VIEW_FRAME,
+        frame_from="world",
+        matrix=_transform_matrix(np.eye(3), -earth_world),
+    )
+
+
+def _camera_distance_au(scene: trimesh.Scene) -> float:
+    eye = scene.camera_transform[:3, 3]
+    return float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
+
+
+def _earth_axis_mesh(state: EarthSunState, camera_distance_au: float) -> trimesh.Trimesh:
+    earth_position = state["earth_position"]
+    spin_axis = state["spin_axis"]
+    axis_half_length = max(
+        camera_distance_au * AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
+        AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * EARTH_RADIUS_AU,
+    )
+    axis_radius = camera_distance_au * AXIS_RADIUS_CAMERA_DISTANCE_FRACTION
+    axis_start = earth_position - spin_axis * axis_half_length
+    axis_end = earth_position + spin_axis * axis_half_length
+    return _line_mesh(
+        axis_start,
+        axis_end,
+        axis_radius,
+        AXIS_COLOR,
+    )
 
 
 def _line_mesh(
