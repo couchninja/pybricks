@@ -4,24 +4,26 @@ Scene graph:
   world -> milky_way (galactic center, axis, sun's galactic orbit)
          -> solar_system (sun at origin, earth and earth orbit in ecliptic coords)
 
-Galactic distances are scaled by GALACTIC_ORBIT_VISUAL_RADIUS_AU; only lengths are
-scaled, not the ecliptic-to-galactic rotation.
+Galactic kpc positions come from ephemeris at true scale, then multiplied by
+GALACTIC_ORBIT_DISTANCE_SCALE after kpc->AU conversion (1 = true scale; solar-system
+geometry stays true AU). Only lengths are scaled, not the ecliptic-to-galactic rotation.
 
 Viewer note: Trimesh's SceneViewer shifts GL_LINES in camera space by scene.scale / 1000
-to reduce z-fighting. Adding the ~150 AU galactic orbit inflates scene.scale, so the
-default offset visibly displaces orbit lines while meshes (sun, earth) stay put. Pass
-offset_lines=False so orbit paths align with the bodies they describe.
+to reduce z-fighting. Galactic geometry sets scene.scale, so the default offset visibly
+displaces orbit lines while meshes (sun, earth) stay put. Pass offset_lines=False so orbit
+paths align with the bodies they describe.
 
 Camera note: Trimesh's default z_near is 0.01 AU. Exaggerated Earth is much smaller, so
-zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU). At true scale
-z_near would be tiny relative to z_far (galactic extent), which exceeds OpenGL depth
-precision; z_near is clamped by MAX_DEPTH_RATIO.
+zooming in clips the planet unless z_near is reduced (see CAMERA_Z_NEAR_AU). z_near is
+clamped by MAX_DEPTH_RATIO and OPENGL_Z_NEAR_MIN_AU because gluPerspective rejects
+smaller near planes on macOS.
 """
 
 import pyglet
 
 import numpy as np
 import trimesh
+from astropy import units as u
 from astropy.time import Time
 from scipy.spatial.transform import Rotation
 from trimesh.visual.color import ColorVisuals
@@ -41,6 +43,9 @@ from similarity.astronomy.ephemeris import (
     sun_galactocentric_kpc,
 )
 
+KPC_TO_AU = (1 * u.kpc).to_value(u.au)
+
+# ARON get this from the astropy constants?
 REAL_SUN_RADIUS_AU = 695_700 / 149_597_870.7
 REAL_EARTH_RADIUS_AU = 6_371 / 149_597_870.7
 
@@ -56,19 +61,25 @@ AXIS_HALF_LENGTH_EARTH_RADII = 2.8
 NETHERLANDS_MARKER_EARTH_RADII = 0.16
 LINE_RADIUS_EARTH_DIAMETERS = 0.03
 CAMERA_DISTANCE_EARTH_RADII = 80
-GALACTIC_ORBIT_VISUAL_RADIUS_AU = 150.0
-GALACTIC_AXIS_HALF_LENGTH_AU = 170.0
-GALACTIC_CENTER_RADIUS_AU = SUN_RADIUS_AU * 3
-GALACTIC_LINE_RADIUS_AU = SUN_RADIUS_AU * 0.4
+GALACTIC_ORBIT_DISTANCE_SCALE = 1e-8
+GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION = 0.05
+GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
+GALACTIC_LINE_RADIUS_ORBIT_FRACTION = 0.0005
 
 # Default Trimesh z_near is 0.01 AU, larger than exaggerated Earth (~0.0009 AU).
 CAMERA_Z_NEAR_EARTH_RADII = 0.01
-CAMERA_Z_FAR_AU = GALACTIC_AXIS_HALF_LENGTH_AU * 2
+TYPICAL_SUN_GALACTIC_DISTANCE_KPC = 8.122
+CAMERA_Z_FAR_AU = (
+    2 * TYPICAL_SUN_GALACTIC_DISTANCE_KPC * KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
+)
 # gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
 MAX_DEPTH_RATIO = 5e7
+# macOS OpenGL rejects z_near below ~1e-5 AU.
+OPENGL_Z_NEAR_MIN_AU = 1e-5
 CAMERA_Z_NEAR_AU = max(
     EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII,
     CAMERA_Z_FAR_AU / MAX_DEPTH_RATIO,
+    OPENGL_Z_NEAR_MIN_AU,
 )
 
 ORBIT_COLOR = [180, 180, 200, 255]
@@ -112,10 +123,20 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
 
     sun_galactic_kpc = sun_galactocentric_kpc(time)
     sun_galactic_distance_kpc = np.linalg.norm(sun_galactic_kpc)
-    galactic_scale = GALACTIC_ORBIT_VISUAL_RADIUS_AU / sun_galactic_distance_kpc
+    galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
+    sun_galactic_distance_au = sun_galactic_distance_kpc * galactic_scale
     sun_galactic_position = sun_galactic_kpc * galactic_scale
     galactic_rotation = ecliptic_to_galactocentric_rotation(time)
     galactic_orbit = sun_galactic_orbit_kpc(time) * galactic_scale
+    galactic_axis_half_length_au = (
+        sun_galactic_distance_au * GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION
+    )
+    galactic_center_radius_au = (
+        sun_galactic_distance_au * GALACTIC_CENTER_RADIUS_ORBIT_FRACTION
+    )
+    galactic_line_radius_au = (
+        sun_galactic_distance_au * GALACTIC_LINE_RADIUS_ORBIT_FRACTION
+    )
 
     scene = trimesh.Scene()
     scene.graph.update(MILKY_WAY_FRAME, "world", matrix=np.eye(4))
@@ -126,7 +147,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     )
 
     galactic_center = _color_mesh(
-        trimesh.creation.icosphere(radius=GALACTIC_CENTER_RADIUS_AU, subdivisions=3),
+        trimesh.creation.icosphere(radius=galactic_center_radius_au, subdivisions=3),
         GALACTIC_CENTER_COLOR,
     )
     scene.add_geometry(
@@ -149,9 +170,9 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
 
     scene.add_geometry(
         _line_mesh(
-            np.array([0.0, 0.0, -GALACTIC_AXIS_HALF_LENGTH_AU]),
-            np.array([0.0, 0.0, GALACTIC_AXIS_HALF_LENGTH_AU]),
-            GALACTIC_LINE_RADIUS_AU,
+            np.array([0.0, 0.0, -galactic_axis_half_length_au]),
+            np.array([0.0, 0.0, galactic_axis_half_length_au]),
+            galactic_line_radius_au,
             GALACTIC_AXIS_COLOR,
         ),
         geom_name="galactic_axis",
