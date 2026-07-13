@@ -6,7 +6,7 @@ alwaysApply: true
 - Prefer functions/modules over classes; use classes only when needed.
 - No Python files in root.
 - Tests in tests/, extend existing test files when possible.
-- Minimal `__init__.py`; use direct module imports (e.g. `from similarity.mesh.generation import create_cube`), not re-exports.
+- Minimal `__init__.py`; use direct module imports (e.g. `from simulate.mesh.generation import create_cube`), not re-exports.
 - Document only when it adds value; skip when code is self-explanatory.
 - Run everything with `pixi run`.
 - Tests and temp scripts in tests/ only; clean up temp files after use.
