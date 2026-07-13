@@ -23,7 +23,7 @@ when zooming out.
 
 from ctypes import byref
 from time import perf_counter
-from typing import Literal, NamedTuple, TypedDict, overload
+from typing import Any, Literal, NamedTuple, TypedDict, cast, overload
 import warnings
 
 import pyglet
@@ -76,6 +76,8 @@ REAL_EARTH_RADIUS_AU = 6_371 / 149_597_870.7
 # EARTH_SIZE_EXAGGERATION = 20
 SUN_SIZE_EXAGGERATION = 1
 EARTH_SIZE_EXAGGERATION = 1
+GALACTIC_ORBIT_DISTANCE_SCALE = 1e-7
+# GALACTIC_ORBIT_DISTANCE_SCALE = 1e-9
 
 SUN_RADIUS_AU = REAL_SUN_RADIUS_AU * SUN_SIZE_EXAGGERATION
 EARTH_RADIUS_AU = REAL_EARTH_RADIUS_AU * EARTH_SIZE_EXAGGERATION
@@ -93,8 +95,6 @@ AXIS_RADIUS_CAMERA_DISTANCE_FRACTION = (
 AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS = 2
 # Pan/zoom sensitivity; keep near the solar-system scale, not galactic bounds.
 TRACKBALL_SCALE_AU = 2.0
-# GALACTIC_ORBIT_DISTANCE_SCALE = 1e-8
-GALACTIC_ORBIT_DISTANCE_SCALE = 1e-9
 GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION = 0.05
 GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
 GALACTIC_LINE_RADIUS_ORBIT_FRACTION = 0.0005
@@ -376,11 +376,11 @@ class _EarthCenteredViewer(SceneViewer):
         super().on_draw()
         self._draw_screen_labels()
 
-    def on_mouse_scroll(self, x, y, dx, dy):
+    def on_mouse_scroll(self, x: int, y: int, dx: float, dy: float) -> None:
         super().on_mouse_scroll(x, y, dx, dy)
         self._sync_camera_clip_planes()
 
-    def reset_view(self, flags=None):
+    def reset_view(self, flags: dict[str, Any] | None = None) -> None:
         self.view = {
             "cull": True,
             "axis": False,
@@ -414,10 +414,7 @@ class _EarthCenteredViewer(SceneViewer):
         ``gluPerspective`` waits until the first real resize/draw.
         """
         z_near, z_far = _camera_clip_planes(self.scene)
-        if (
-            z_near == self.scene.camera.z_near
-            and z_far == self.scene.camera.z_far
-        ):
+        if z_near == self.scene.camera.z_near and z_far == self.scene.camera.z_far:
             return
         self.scene.camera.z_near = z_near
         self.scene.camera.z_far = z_far
@@ -549,11 +546,14 @@ def _earth_sun_state(
         ),
     }
     if include_orbit:
-        orbit_state: EarthSunStateWithOrbit = {
-            **state,
-            "orbit": earth_orbit_ecliptic_au(time),
-            "galactic_orbit": sun_galactic_orbit_kpc(time) * galactic_scale,
-        }
+        orbit_state = cast(
+            EarthSunStateWithOrbit,
+            {
+                **state,
+                "orbit": earth_orbit_ecliptic_au(time),
+                "galactic_orbit": sun_galactic_orbit_kpc(time) * galactic_scale,
+            },
+        )
         return orbit_state
     return state
 
@@ -660,7 +660,9 @@ def _year_boundary_path(time: Time) -> trimesh.path.Path3D:
         path = trimesh.load_path(np.array([[sun, sun]]))
         path.colors = np.tile(YEAR_BOUNDARY_COLOR, (len(path.entities), 1))
         return path
-    segments = np.array([[np.zeros(3, dtype=float), position] for position in positions])
+    segments = np.array(
+        [[np.zeros(3, dtype=float), position] for position in positions]
+    )
     path = trimesh.load_path(segments)
     path.colors = np.tile(YEAR_BOUNDARY_COLOR, (len(path.entities), 1))
     return path

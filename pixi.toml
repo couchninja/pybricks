@@ -16,6 +16,8 @@ upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
 earth = "python tests/visualize_earth_orbit.py"
+precommit = "pre-commit run --all-files"
+precommit-install = "pre-commit install"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
@@ -32,6 +34,7 @@ trimesh = ">=4.0"
 scipy = ">=1.18.0"
 pyglet = ">=1.5.31,<2.0"
 astropy = ">=7.0"
+pre-commit = ">=4.0"
 ruff = "==0.14.14"
 ty = "==0.0.14"
 

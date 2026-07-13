@@ -2,6 +2,7 @@ import numpy as np
 from astropy import units as u
 from astropy.coordinates import (
     BarycentricMeanEcliptic,
+    CartesianRepresentation,
     EarthLocation,
     GCRS,
     Galactocentric,
@@ -145,7 +146,9 @@ def current_time() -> Time:
     return Time.now()
 
 
-def _heliocentric_ecliptic_au(earth, sun) -> np.ndarray:
+def _heliocentric_ecliptic_au(
+    earth: CartesianRepresentation, sun: CartesianRepresentation
+) -> np.ndarray:
     relative = SkyCoord(
         earth - sun,
         representation_type="cartesian",
