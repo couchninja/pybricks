@@ -16,6 +16,7 @@ upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
 visualize = "python simulate/astronomy/visualization.py"
+visualize-watch = "python -m watchfiles --filter python \"python simulate/astronomy/visualization.py\" simulate/astronomy/"
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"
 
@@ -37,6 +38,7 @@ astropy = ">=7.0"
 pre-commit = ">=4.0"
 ruff = "==0.14.14"
 ty = "==0.0.14"
+watchfiles = ">=1.0"
 
 
 # pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
