@@ -1,12 +1,12 @@
 import numpy as np
 from astropy import units as u
 from astropy.coordinates import (
+    GCRS,
+    ITRS,
     BarycentricMeanEcliptic,
     CartesianRepresentation,
     EarthLocation,
-    GCRS,
     Galactocentric,
-    ITRS,
     SkyCoord,
     get_body_barycentric,
 )
@@ -155,9 +155,7 @@ def current_time() -> Time:
     return Time.now()
 
 
-def _heliocentric_ecliptic_au(
-    earth: CartesianRepresentation, sun: CartesianRepresentation
-) -> np.ndarray:
+def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepresentation) -> np.ndarray:
     relative = SkyCoord(
         earth - sun,
         representation_type="cartesian",
@@ -183,9 +181,7 @@ def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.nda
         representation_type="cartesian",
     )
     gcrs = ecliptic.transform_to(GCRS(obstime=time))
-    galactic = SkyCoord(gcrs, representation_type="cartesian").transform_to(
-        Galactocentric()
-    )
+    galactic = SkyCoord(gcrs, representation_type="cartesian").transform_to(Galactocentric())
     direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
     direction -= sun_galactic
     return direction / np.linalg.norm(direction)
