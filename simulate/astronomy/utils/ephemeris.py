@@ -48,6 +48,15 @@ def earth_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
 
 
 def earth_year_boundary_positions_ecliptic_au(time: Time) -> np.ndarray:
+    """Earth positions at calendar Jan 1 dates within ±0.5 Julian years of ``time``.
+
+    Returns one heliocentric ecliptic position (AU) per Jan 1 in
+    ``[time - 0.5 year, time + 0.5 year)``. Usually exactly one; occasionally
+    zero for a narrow band around mid-year. Julian years are 365.25 days while
+    calendar years are 365/366 days, so the half-open window can fall strictly
+    between two consecutive Jan 1 instants (both excluded by ``start <= boundary
+    < end``).
+    """
     start = time - 0.5 * u.year
     end = time + 0.5 * u.year
     start_year = int(np.floor(start.decimalyear))
