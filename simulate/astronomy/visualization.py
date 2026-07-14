@@ -34,7 +34,7 @@ import numpy as np
 import trimesh
 from astropy import units as u
 from astropy.time import Time
-from astropy.utils.exceptions import ErfaWarning
+from erfa import ErfaWarning
 from trimesh.visual.color import ColorVisuals
 from trimesh.viewer.trackball import Trackball
 from trimesh.viewer.windowed import SceneViewer
