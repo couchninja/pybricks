@@ -1,20 +1,16 @@
 from ctypes import byref
 from time import perf_counter
-from typing import Any, NamedTuple, TypedDict
-
-import pyglet
-from pyglet import gl, text
-from pyglet.gl.glu import gluProject
+from typing import Any, NamedTuple, TypedDict, override
 
 import numpy as np
+import pyglet
 import trimesh
-from astropy import units as u
-from astropy.time import Time
+from pyglet import gl, text
+from pyglet.gl.glu import gluProject
 from trimesh.viewer.trackball import Trackball
 from trimesh.viewer.windowed import SceneViewer
 
 from simulate.astronomy.constants import (
-    ANIMATION_CALLBACK_PERIOD,
     CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER,
     CAMERA_Z_NEAR_EARTH_RADII,
     EARTH_RADIUS_AU,
@@ -34,21 +30,18 @@ try:
     from pyglet.window.cocoa.pyglet_view import PygletView_Implementation
 
     @PygletView_Implementation.PygletView.method("B@")
-    def acceptsFirstMouse_(self, _nsevent):
+    def acceptsFirstMouse_(self, _nsevent) -> bool:
         return True
 except Exception:
     pass
 
 
 class _EarthCenteredViewerState(TypedDict):
-    start_time: Time
-    last_orbit_time: Time | None
     screen_labels: list[text.Label]
     fps_label: text.Label
     fps_frames: int
     fps_interval_start: float
     fps_display: float
-    time_scaling: float
 
 
 class _BodyScreenLabel(NamedTuple):
@@ -67,21 +60,14 @@ _BODY_SCREEN_LABELS = (
 class EarthCenteredViewer(SceneViewer):
     _state: _EarthCenteredViewerState
 
+    @override
     def __init__(
         self,
         scene: trimesh.Scene,
         camera_distance: float,
-        start_time: Time,
-        *,
-        time_scaling: float = 1.0,
         **kwargs,
     ):
-        from simulate.astronomy.visualization import update_earth_sun_scene
-
-        self._update_earth_sun_scene = update_earth_sun_scene
         self._state: _EarthCenteredViewerState = {
-            "start_time": start_time,
-            "last_orbit_time": None,
             "screen_labels": [
                 text.Label(
                     text=body.caption,
@@ -102,33 +88,34 @@ class EarthCenteredViewer(SceneViewer):
             "fps_frames": 0,
             "fps_interval_start": perf_counter(),
             "fps_display": 0.0,
-            "time_scaling": time_scaling,
         }
         scene.set_camera(center=EARTH_VIEW_ORIGIN, distance=camera_distance)
 
         # Without this, the viewer will show a black screen until any mouse or keyboard input.
         kwargs["start_loop"] = False
-        kwargs["callback"] = self._animate
-        kwargs["callback_period"] = ANIMATION_CALLBACK_PERIOD
-        kwargs["caption"] = f"Earth-sun ({start_time.iso})"
         super().__init__(scene, **kwargs)
         self._sync_camera_clip_planes()
-        self._animation_start = perf_counter()
         pyglet.clock.schedule_once(self._initial_draw, 0)
         pyglet.app.run()
 
+    @override
     def on_show(self) -> None:
         self.activate()
 
+    @override
     def on_draw(self) -> None:
         super().on_draw()
+        self._update_caption()
         self._update_fps()
         self._draw_screen_labels()
+        self._sync_camera_clip_planes()
 
+    @override
     def on_mouse_scroll(self, x: int, y: int, dx: float, dy: float) -> None:
         super().on_mouse_scroll(x, y, dx, dy)
         self._sync_camera_clip_planes()
 
+    @override
     def reset_view(self, flags: dict[str, Any] | None = None) -> None:
         self.view = {
             "cull": True,
@@ -190,19 +177,14 @@ class EarthCenteredViewer(SceneViewer):
         self.dispatch_event("on_draw")
         self.flip()
 
-    def _animate(self, scene: trimesh.Scene) -> None:
-        elapsed = perf_counter() - self._animation_start
-        time = (
-            self._state["start_time"] + elapsed * self._state["time_scaling"] * u.second
-        )
-        self._state["last_orbit_time"] = self._update_earth_sun_scene(
-            scene,
-            time,
-            self._state["last_orbit_time"],
-            _camera_distance_au(scene),
-        )
-        self._sync_camera_clip_planes()
-        self.set_caption(f"Earth-sun ({time.iso})")
+    def _update_caption(self) -> None:
+        animation = self.scene.metadata.get("earth_sun_animation")
+        if animation is None:
+            return
+        current_time = animation["current_time"]
+        if current_time is None:
+            return
+        self.set_caption(f"Earth-sun ({current_time.iso})")
 
     def _update_fps(self) -> None:
         self._state["fps_frames"] += 1
@@ -218,8 +200,7 @@ class EarthCenteredViewer(SceneViewer):
         gl.glDisable(gl.GL_DEPTH_TEST)
 
         screen_positions = [
-            _world_to_screen_gl(_label_world_position(self.scene, body.node_name))
-            for body in _BODY_SCREEN_LABELS
+            _world_to_screen_gl(_label_world_position(self.scene, body.node_name)) for body in _BODY_SCREEN_LABELS
         ]
 
         gl.glMatrixMode(gl.GL_PROJECTION)
@@ -232,9 +213,7 @@ class EarthCenteredViewer(SceneViewer):
 
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-        for label, screen in zip(
-            self._state["screen_labels"], screen_positions, strict=True
-        ):
+        for label, screen in zip(self._state["screen_labels"], screen_positions, strict=True):
             if screen is None:
                 label.visible = False
                 continue
@@ -256,13 +235,9 @@ class EarthCenteredViewer(SceneViewer):
         gl.glEnable(gl.GL_DEPTH_TEST)
 
 
-def _camera_distance_au(scene: trimesh.Scene) -> float:
-    eye = scene.camera_transform[:3, 3]
-    return float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
-
-
 def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
-    camera_distance = _camera_distance_au(scene)
+    eye = scene.camera_transform[:3, 3]
+    camera_distance = float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
     try:
         scene_scale = float(scene.scale)
     except Exception:
