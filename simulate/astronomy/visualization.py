@@ -21,24 +21,42 @@ z_far is set from camera distance plus scene scale so galactic geometry stays vi
 when zooming out.
 """
 
-from ctypes import byref
-from time import perf_counter
-from typing import Any, NamedTuple, TypedDict, cast
+from typing import TypedDict
 import warnings
-
-import pyglet
-from pyglet import gl, text
-from pyglet.gl.glu import gluProject
 
 import numpy as np
 import trimesh
-from astropy import units as u
 from astropy.time import Time
 from erfa import ErfaWarning
 from trimesh.visual.color import ColorVisuals
-from trimesh.viewer.trackball import Trackball
-from trimesh.viewer.windowed import SceneViewer
 
+from simulate.astronomy.constants import (
+    AXIS_COLOR,
+    AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
+    AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
+    CAMERA_DISTANCE_EARTH_RADII,
+    EARTH_ORBIT_SEGMENTS,
+    EARTH_RADIUS_AU,
+    EARTH_VIEW_FRAME,
+    EARTH_VIEW_ORIGIN,
+    GALACTIC_AXIS_COLOR,
+    GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION,
+    GALACTIC_CENTER_COLOR,
+    GALACTIC_CENTER_RADIUS_ORBIT_FRACTION,
+    GALACTIC_ORBIT_COLOR,
+    GALACTIC_ORBIT_DISTANCE_SCALE,
+    KPC_TO_AU,
+    LINE_WIDTH_PIXELS,
+    MILKY_WAY_FRAME,
+    NETHERLANDS_COLOR,
+    NETHERLANDS_MARKER_EARTH_RADII,
+    ORBIT_COLOR,
+    ORBIT_UPDATE_INTERVAL,
+    SOLAR_SYSTEM_FRAME,
+    SUN_COLOR,
+    SUN_RADIUS_AU,
+    YEAR_BOUNDARY_COLOR,
+)
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
     current_time,
@@ -53,78 +71,6 @@ from simulate.astronomy.utils.ephemeris import (
     sun_galactocentric_kpc,
 )
 
-try:
-    # macOS focuses inactive windows without delivering the first mouse click.
-    # Teach the Cocoa view to accept the first click so click-drag rotation works
-    # immediately (scroll already works because it doesn't require mouse capture).
-    from pyglet.window.cocoa.pyglet_view import PygletView_Implementation
-
-    @PygletView_Implementation.PygletView.method("B@")
-    def acceptsFirstMouse_(self, _nsevent):
-        return True
-except Exception:
-    pass
-
-KPC_TO_AU = (1 * u.kpc).to_value(u.au)
-
-# ARON get this from the astropy constants?
-REAL_SUN_RADIUS_AU = 695_700 / 149_597_870.7
-REAL_EARTH_RADIUS_AU = 6_371 / 149_597_870.7
-
-# SUN_SIZE_EXAGGERATION = 20
-# EARTH_SIZE_EXAGGERATION = 20
-SUN_SIZE_EXAGGERATION = 1
-EARTH_SIZE_EXAGGERATION = 1
-GALACTIC_ORBIT_DISTANCE_SCALE = 1e-7
-# GALACTIC_ORBIT_DISTANCE_SCALE = 1e-9
-
-EARTH_ORBIT_SEGMENTS = 360 * 5
-
-SUN_RADIUS_AU = REAL_SUN_RADIUS_AU * SUN_SIZE_EXAGGERATION
-EARTH_RADIUS_AU = REAL_EARTH_RADIUS_AU * EARTH_SIZE_EXAGGERATION
-
-AXIS_HALF_LENGTH_EARTH_RADII = 2.8
-NETHERLANDS_MARKER_EARTH_RADII = 0.16
-CAMERA_DISTANCE_EARTH_RADII = 80
-AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION = (
-    AXIS_HALF_LENGTH_EARTH_RADII / CAMERA_DISTANCE_EARTH_RADII
-)
-AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS = 2
-# Pan/zoom sensitivity; keep near the solar-system scale, not galactic bounds.
-TRACKBALL_SCALE_AU = 2.0
-GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION = 0.05
-GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
-
-# Default Trimesh z_near is 0.01 AU, larger than exaggerated Earth (~0.0009 AU).
-CAMERA_Z_NEAR_EARTH_RADII = 0.01
-# z_far = camera distance + scene.scale * this multiplier (see _camera_clip_planes).
-CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER = 2.0
-# gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
-MAX_DEPTH_RATIO = 5e7
-# macOS OpenGL rejects z_near below ~1e-5 AU.
-OPENGL_Z_NEAR_MIN_AU = 1e-5
-
-ORBIT_COLOR = [180, 180, 200, 255]
-YEAR_BOUNDARY_COLOR = [255, 220, 80, 255]
-SUN_COLOR = [255, 210, 60, 255]
-AXIS_COLOR = [220, 60, 60, 255]
-NETHERLANDS_COLOR = [255, 80, 40, 255]
-GALACTIC_ORBIT_COLOR = [120, 80, 180, 255]
-GALACTIC_AXIS_COLOR = [180, 120, 255, 255]
-GALACTIC_CENTER_COLOR = [240, 200, 255, 255]
-LABEL_OFFSET_BODY_RADII = 2.5
-LABEL_FONT_SIZE = 18
-FPS_LABEL_MARGIN = 8
-LINE_WIDTH_PIXELS = 1
-
-MILKY_WAY_FRAME = "milky_way"
-SOLAR_SYSTEM_FRAME = "solar_system"
-EARTH_VIEW_FRAME = "earth_view"
-EARTH_VIEW_ORIGIN = np.zeros(3)
-
-ANIMATION_CALLBACK_PERIOD = 1.0 / 60.0
-ORBIT_UPDATE_INTERVAL = 10 * u.day
-
 
 class EarthSunState(TypedDict):
     earth_position: np.ndarray
@@ -137,40 +83,13 @@ class EarthSunState(TypedDict):
     galactic_center_radius_au: float
 
 
-class EarthSunStateWithOrbit(EarthSunState):
-    orbit: np.ndarray
-    galactic_orbit: np.ndarray
-
-
-class _BodyScreenLabel(NamedTuple):
-    node_name: str
-    caption: str
-    color: tuple[int, int, int, int]
-
-
-class _EarthCenteredViewerState(TypedDict):
-    start_time: Time
-    last_orbit_time: Time | None
-    screen_labels: list[text.Label]
-    fps_label: text.Label
-    fps_frames: int
-    fps_interval_start: float
-    fps_display: float
-    time_scaling: float
-
-
-_BODY_SCREEN_LABELS = (
-    _BodyScreenLabel("sun", "Sun", (255, 210, 60, 255)),
-    _BodyScreenLabel("earth", "Earth", (255, 255, 255, 255)),
-    _BodyScreenLabel("galactic_center", "Milky Way center", (240, 200, 255, 255)),
-)
-
-
 def show_earth_sun(
     time: Time | None = None,
     *,
     time_scaling: float = 1.0,
 ) -> None:
+    from simulate.astronomy.earth_centered_viewer import EarthCenteredViewer
+
     warnings.filterwarnings("ignore", message=".*dubious year.*", category=ErfaWarning)
 
     if time is None:
@@ -183,7 +102,7 @@ def show_earth_sun(
     )
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
-        viewer=_EarthCenteredViewer,
+        viewer=EarthCenteredViewer,
         camera_distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
         offset_lines=False,
         line_settings={"line_width": LINE_WIDTH_PIXELS},
@@ -196,7 +115,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     if time is None:
         time = current_time()
 
-    state = _earth_sun_state_with_orbit(time)
+    state = _earth_sun_state(time)
     scene = trimesh.Scene()
     scene.graph.update(EARTH_VIEW_FRAME, "world", matrix=np.eye(4))
     scene.graph.update(MILKY_WAY_FRAME, EARTH_VIEW_FRAME, matrix=np.eye(4))
@@ -221,7 +140,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         parent_node_name=MILKY_WAY_FRAME,
     )
 
-    galactic_orbit_path = trimesh.load_path(state["galactic_orbit"])
+    galactic_orbit_path = trimesh.load_path(_galactic_orbit_path(time))
     galactic_orbit_path.colors = np.tile(
         GALACTIC_ORBIT_COLOR, (len(galactic_orbit_path.entities), 1)
     )
@@ -263,7 +182,9 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
-    orbit_path: trimesh.path.Path3D = trimesh.load_path(state["orbit"])
+    orbit_path: trimesh.path.Path3D = trimesh.load_path(
+        earth_orbit_ecliptic_au(time, samples=EARTH_ORBIT_SEGMENTS)
+    )
     orbit_path.colors = np.tile(ORBIT_COLOR, (len(orbit_path.entities), 1))
     scene.add_geometry(
         orbit_path,
@@ -333,14 +254,15 @@ def update_earth_sun_scene(
     _sync_earth_view_frame(scene, state)
 
     if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
-        orbit_state = _earth_sun_state_with_orbit(time)
-        orbit_path = trimesh.load_path(orbit_state["orbit"])
+        orbit_path = trimesh.load_path(
+            earth_orbit_ecliptic_au(time, samples=EARTH_ORBIT_SEGMENTS)
+        )
         orbit_path.colors = np.tile(ORBIT_COLOR, (len(orbit_path.entities), 1))
         scene.geometry["orbit"] = orbit_path
 
         scene.geometry["year_boundaries"] = _year_boundary_path(time)
 
-        galactic_orbit_path = trimesh.load_path(orbit_state["galactic_orbit"])
+        galactic_orbit_path = trimesh.load_path(_galactic_orbit_path(time))
         galactic_orbit_path.colors = np.tile(
             GALACTIC_ORBIT_COLOR, (len(galactic_orbit_path.entities), 1)
         )
@@ -350,206 +272,9 @@ def update_earth_sun_scene(
     return last_orbit_time
 
 
-class _EarthCenteredViewer(SceneViewer):
-    _state: _EarthCenteredViewerState
-
-    def __init__(
-        self,
-        scene: trimesh.Scene,
-        camera_distance: float,
-        start_time: Time,
-        *,
-        time_scaling: float = 1.0,
-        **kwargs,
-    ):
-        self._state: _EarthCenteredViewerState = {
-            "start_time": start_time,
-            "last_orbit_time": None,
-            "screen_labels": [
-                text.Label(
-                    text=body.caption,
-                    font_size=LABEL_FONT_SIZE,
-                    color=body.color,
-                    anchor_x="center",
-                    anchor_y="bottom",
-                )
-                for body in _BODY_SCREEN_LABELS
-            ],
-            "fps_label": text.Label(
-                "0 FPS",
-                font_size=LABEL_FONT_SIZE,
-                color=(255, 255, 255, 200),
-                anchor_x="left",
-                anchor_y="top",
-            ),
-            "fps_frames": 0,
-            "fps_interval_start": perf_counter(),
-            "fps_display": 0.0,
-            "time_scaling": time_scaling,
-        }
-        scene.set_camera(center=EARTH_VIEW_ORIGIN, distance=camera_distance)
-
-        # Without this, the viewer will show a black screen until any mouse or keyboard input.
-        kwargs["start_loop"] = False
-        kwargs["callback"] = self._animate
-        kwargs["callback_period"] = ANIMATION_CALLBACK_PERIOD
-        kwargs["caption"] = f"Earth-sun ({start_time.iso})"
-        super().__init__(scene, **kwargs)
-        self._sync_camera_clip_planes()
-        self._animation_start = perf_counter()
-        pyglet.clock.schedule_once(self._initial_draw, 0)
-        pyglet.app.run()
-
-    def on_show(self) -> None:
-        self.activate()
-
-    def on_draw(self) -> None:
-        super().on_draw()
-        self._update_fps()
-        self._draw_screen_labels()
-
-    def on_mouse_scroll(self, x: int, y: int, dx: float, dy: float) -> None:
-        super().on_mouse_scroll(x, y, dx, dy)
-        self._sync_camera_clip_planes()
-
-    def reset_view(self, flags: dict[str, Any] | None = None) -> None:
-        self.view = {
-            "cull": True,
-            "axis": False,
-            "grid": False,
-            "fullscreen": False,
-            "wireframe": False,
-            "ball": Trackball(
-                pose=self._initial_camera_transform,
-                size=self.scene.camera.resolution,
-                scale=TRACKBALL_SCALE_AU,
-                target=EARTH_VIEW_ORIGIN,
-            ),
-        }
-        self.scene.camera_transform = self.view["ball"].pose
-        if isinstance(flags, dict):
-            for key, value in flags.items():
-                if key in self.view:
-                    self.view[key] = value
-            self.update_flags()
-        self._sync_camera_clip_planes()
-
-    def _sync_camera_clip_planes(self) -> None:
-        """Update ``z_near``/``z_far`` from camera distance and scene scale.
-
-        Galactic geometry extends well beyond the solar system. A fixed far plane
-        clipped distant objects when zooming out. Recompute the clip planes on
-        zoom, animation, and view reset so the full scene stays visible.
-
-        Perspective is refreshed only after the Cocoa window exists; during
-        ``reset_view`` in ``super().__init__`` the clip values are set but
-        ``gluPerspective`` waits until the first real resize/draw.
-        """
-        z_near, z_far = _camera_clip_planes(self.scene)
-        if z_near == self.scene.camera.z_near and z_far == self.scene.camera.z_far:
-            return
-        self.scene.camera.z_near = z_near
-        self.scene.camera.z_far = z_far
-        if getattr(self, "_nswindow", None) is None:
-            return
-        width, height = self.get_size()
-        if width > 0 and height > 0:
-            self._update_perspective(width, height)
-
-    def _initial_draw(self, _dt: float) -> None:
-        """Draw the first frame after the window and OpenGL context exist.
-
-        ``start_loop=False`` keeps pyglet from rendering until input arrives,
-        which leaves a black screen on startup. This callback runs once on the
-        next clock tick to set the viewport, create screen labels (they need an
-        active GL context), and present the scene immediately.
-        """
-        self.activate()
-        self.switch_to()
-        if self.width > 0 and self.height > 0:
-            self.dispatch_event("on_resize", self.width, self.height)
-        self._sync_camera_clip_planes()
-
-        self.dispatch_event("on_draw")
-        self.flip()
-
-    def _animate(self, scene: trimesh.Scene) -> None:
-        elapsed = perf_counter() - self._animation_start
-        time = (
-            self._state["start_time"] + elapsed * self._state["time_scaling"] * u.second
-        )
-        self._state["last_orbit_time"] = update_earth_sun_scene(
-            scene,
-            time,
-            self._state["last_orbit_time"],
-            _camera_distance_au(scene),
-        )
-        self._sync_camera_clip_planes()
-        self.set_caption(f"Earth-sun ({time.iso})")
-
-    def _update_fps(self) -> None:
-        self._state["fps_frames"] += 1
-        elapsed = perf_counter() - self._state["fps_interval_start"]
-        if elapsed < 1.0:
-            return
-        self._state["fps_display"] = self._state["fps_frames"] / elapsed
-        self._state["fps_frames"] = 0
-        self._state["fps_interval_start"] = perf_counter()
-
-    def _draw_screen_labels(self) -> None:
-        width, height = self.get_viewport_size()
-        gl.glDisable(gl.GL_DEPTH_TEST)
-
-        screen_positions = [
-            _world_to_screen_gl(_label_world_position(self.scene, body.node_name))
-            for body in _BODY_SCREEN_LABELS
-        ]
-
-        gl.glMatrixMode(gl.GL_PROJECTION)
-        gl.glPushMatrix()
-        gl.glLoadIdentity()
-        gl.gluOrtho2D(0, width, 0, height)
-        gl.glMatrixMode(gl.GL_MODELVIEW)
-        gl.glPushMatrix()
-        gl.glLoadIdentity()
-
-        gl.glEnable(gl.GL_BLEND)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-        for label, screen in zip(
-            self._state["screen_labels"], screen_positions, strict=True
-        ):
-            if screen is None:
-                label.visible = False
-                continue
-            label.visible = True
-            label.x = int(screen[0])
-            label.y = int(screen[1])
-            label.draw()
-        fps_label = self._state["fps_label"]
-        fps_label.text = f"{self._state['fps_display']:.0f} FPS"
-        fps_label.x = FPS_LABEL_MARGIN
-        fps_label.y = height - FPS_LABEL_MARGIN
-        fps_label.draw()
-        gl.glDisable(gl.GL_BLEND)
-
-        gl.glPopMatrix()
-        gl.glMatrixMode(gl.GL_PROJECTION)
-        gl.glPopMatrix()
-        gl.glMatrixMode(gl.GL_MODELVIEW)
-        gl.glEnable(gl.GL_DEPTH_TEST)
-
-
-def _earth_sun_state_with_orbit(time: Time) -> EarthSunStateWithOrbit:
-    state = _earth_sun_state(time)
+def _galactic_orbit_path(time: Time) -> trimesh.path.Path3D:
     galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
-    return cast(
-        EarthSunStateWithOrbit,
-        {
-            **state,
-            "orbit": earth_orbit_ecliptic_au(time, samples=EARTH_ORBIT_SEGMENTS),
-            "galactic_orbit": sun_galactic_orbit_kpc(time) * galactic_scale,
-        },
-    )
+    return trimesh.load_path(sun_galactic_orbit_kpc(time) * galactic_scale)
 
 
 def _earth_sun_state(time: Time) -> EarthSunState:
@@ -608,62 +333,6 @@ def _earth_axis_path(
     axis_start = earth_position - spin_axis * axis_half_length
     axis_end = earth_position + spin_axis * axis_half_length
     return _segment_path(axis_start, axis_end, AXIS_COLOR)
-
-
-def _label_world_position(scene: trimesh.Scene, node_name: str) -> np.ndarray:
-    transform, geometry_name = scene.graph.get(node_name, "world")
-    mesh = scene.geometry[geometry_name]
-    radius = mesh.bounding_sphere.primitive.radius
-    offset = np.array([0.0, 0.0, radius * LABEL_OFFSET_BODY_RADII, 1.0])
-    return (transform @ offset)[:3]
-
-
-def _camera_distance_au(scene: trimesh.Scene) -> float:
-    eye = scene.camera_transform[:3, 3]
-    return float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
-
-
-def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
-    camera_distance = _camera_distance_au(scene)
-    try:
-        scene_scale = float(scene.scale)
-    except Exception:
-        scene_scale = 1.0
-    z_far = camera_distance + scene_scale * CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER
-    z_near = max(
-        EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII,
-        z_far / MAX_DEPTH_RATIO,
-        OPENGL_Z_NEAR_MIN_AU,
-    )
-    return z_near, z_far
-
-
-def _world_to_screen_gl(world: np.ndarray) -> tuple[float, float] | None:
-    modelview = (gl.GLdouble * 16)()
-    projection = (gl.GLdouble * 16)()
-    viewport = (gl.GLint * 4)()
-    gl.glGetDoublev(gl.GL_MODELVIEW_MATRIX, modelview)
-    gl.glGetDoublev(gl.GL_PROJECTION_MATRIX, projection)
-    gl.glGetIntegerv(gl.GL_VIEWPORT, viewport)
-
-    win_x = gl.GLdouble()
-    win_y = gl.GLdouble()
-    win_z = gl.GLdouble()
-    if not gluProject(
-        gl.GLdouble(world[0]),
-        gl.GLdouble(world[1]),
-        gl.GLdouble(world[2]),
-        modelview,
-        projection,
-        viewport,
-        byref(win_x),
-        byref(win_y),
-        byref(win_z),
-    ):
-        return None
-    if win_z.value < 0.0 or win_z.value > 1.0:
-        return None
-    return float(win_x.value), float(win_y.value)
 
 
 def _segment_path(
