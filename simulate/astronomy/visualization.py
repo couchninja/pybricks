@@ -148,6 +148,17 @@ class _BodyScreenLabel(NamedTuple):
     color: tuple[int, int, int, int]
 
 
+class _EarthCenteredViewerState(TypedDict):
+    start_time: Time
+    last_orbit_time: Time | None
+    screen_labels: list[text.Label]
+    fps_label: text.Label
+    fps_frames: int
+    fps_interval_start: float
+    fps_display: float
+    time_scaling: float
+
+
 _BODY_SCREEN_LABELS = (
     _BodyScreenLabel("sun", "Sun", (255, 210, 60, 255)),
     _BodyScreenLabel("earth", "Earth", (255, 255, 255, 255)),
@@ -340,6 +351,8 @@ def update_earth_sun_scene(
 
 
 class _EarthCenteredViewer(SceneViewer):
+    _state: _EarthCenteredViewerState
+
     def __init__(
         self,
         scene: trimesh.Scene,
@@ -349,14 +362,31 @@ class _EarthCenteredViewer(SceneViewer):
         time_scaling: float = 1.0,
         **kwargs,
     ):
-        self._start_time = start_time
-        self._last_orbit_time: Time | None = None
-        self._screen_labels: list[text.Label] | None = None
-        self._fps_label: text.Label | None = None
-        self._fps_frames = 0
-        self._fps_interval_start = perf_counter()
-        self._fps_display = 0.0
-        self._time_scaling = time_scaling
+        self._state: _EarthCenteredViewerState = {
+            "start_time": start_time,
+            "last_orbit_time": None,
+            "screen_labels": [
+                text.Label(
+                    text=body.caption,
+                    font_size=LABEL_FONT_SIZE,
+                    color=body.color,
+                    anchor_x="center",
+                    anchor_y="bottom",
+                )
+                for body in _BODY_SCREEN_LABELS
+            ],
+            "fps_label": text.Label(
+                "0 FPS",
+                font_size=LABEL_FONT_SIZE,
+                color=(255, 255, 255, 200),
+                anchor_x="left",
+                anchor_y="top",
+            ),
+            "fps_frames": 0,
+            "fps_interval_start": perf_counter(),
+            "fps_display": 0.0,
+            "time_scaling": time_scaling,
+        }
         scene.set_camera(center=EARTH_VIEW_ORIGIN, distance=camera_distance)
 
         # Without this, the viewer will show a black screen until any mouse or keyboard input.
@@ -439,56 +469,32 @@ class _EarthCenteredViewer(SceneViewer):
         if self.width > 0 and self.height > 0:
             self.dispatch_event("on_resize", self.width, self.height)
         self._sync_camera_clip_planes()
-        self._init_screen_labels()
-        self._init_fps_label()
+
         self.dispatch_event("on_draw")
         self.flip()
 
     def _animate(self, scene: trimesh.Scene) -> None:
         elapsed = perf_counter() - self._animation_start
-        time = self._start_time + elapsed * self._time_scaling * u.second
-        self._last_orbit_time = update_earth_sun_scene(
+        time = (
+            self._state["start_time"] + elapsed * self._state["time_scaling"] * u.second
+        )
+        self._state["last_orbit_time"] = update_earth_sun_scene(
             scene,
             time,
-            self._last_orbit_time,
+            self._state["last_orbit_time"],
             _camera_distance_au(scene),
         )
         self._sync_camera_clip_planes()
         self.set_caption(f"Earth-sun ({time.iso})")
 
-    def _init_screen_labels(self) -> list[text.Label]:
-        if self._screen_labels is None:
-            self._screen_labels = [
-                text.Label(
-                    body.caption,
-                    font_size=LABEL_FONT_SIZE,
-                    color=body.color,
-                    anchor_x="center",
-                    anchor_y="bottom",
-                )
-                for body in _BODY_SCREEN_LABELS
-            ]
-        return self._screen_labels
-
-    def _init_fps_label(self) -> text.Label:
-        if self._fps_label is None:
-            self._fps_label = text.Label(
-                "0 FPS",
-                font_size=LABEL_FONT_SIZE,
-                color=(255, 255, 255, 200),
-                anchor_x="left",
-                anchor_y="top",
-            )
-        return self._fps_label
-
     def _update_fps(self) -> None:
-        self._fps_frames += 1
-        elapsed = perf_counter() - self._fps_interval_start
+        self._state["fps_frames"] += 1
+        elapsed = perf_counter() - self._state["fps_interval_start"]
         if elapsed < 1.0:
             return
-        self._fps_display = self._fps_frames / elapsed
-        self._fps_frames = 0
-        self._fps_interval_start = perf_counter()
+        self._state["fps_display"] = self._state["fps_frames"] / elapsed
+        self._state["fps_frames"] = 0
+        self._state["fps_interval_start"] = perf_counter()
 
     def _draw_screen_labels(self) -> None:
         width, height = self.get_viewport_size()
@@ -510,7 +516,7 @@ class _EarthCenteredViewer(SceneViewer):
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
         for label, screen in zip(
-            self._init_screen_labels(), screen_positions, strict=True
+            self._state["screen_labels"], screen_positions, strict=True
         ):
             if screen is None:
                 label.visible = False
@@ -519,8 +525,8 @@ class _EarthCenteredViewer(SceneViewer):
             label.x = int(screen[0])
             label.y = int(screen[1])
             label.draw()
-        fps_label = self._init_fps_label()
-        fps_label.text = f"{self._fps_display:.0f} FPS"
+        fps_label = self._state["fps_label"]
+        fps_label.text = f"{self._state['fps_display']:.0f} FPS"
         fps_label.x = FPS_LABEL_MARGIN
         fps_label.y = height - FPS_LABEL_MARGIN
         fps_label.draw()
