@@ -13,13 +13,14 @@ from trimesh.viewer.windowed import SceneViewer
 from simulate.astronomy.constants import (
     CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER,
     CAMERA_Z_NEAR_EARTH_RADII,
+    EARTH_CENTER_ORIGIN,
     EARTH_RADIUS_AU,
-    EARTH_VIEW_ORIGIN,
     FPS_LABEL_MARGIN,
     LABEL_FONT_SIZE,
     LABEL_OFFSET_BODY_RADII,
     MAX_DEPTH_RATIO,
     OPENGL_Z_NEAR_MIN_AU,
+    ROOT_FRAME,
     TRACKBALL_SCALE_AU,
 )
 
@@ -89,7 +90,7 @@ class EarthCenteredViewer(SceneViewer):
             "fps_interval_start": perf_counter(),
             "fps_display": 0.0,
         }
-        scene.set_camera(center=EARTH_VIEW_ORIGIN, distance=camera_distance)
+        scene.set_camera(center=EARTH_CENTER_ORIGIN, distance=camera_distance)
 
         # Without this, the viewer will show a black screen until any mouse or keyboard input.
         kwargs["start_loop"] = False
@@ -127,7 +128,7 @@ class EarthCenteredViewer(SceneViewer):
                 pose=self._initial_camera_transform,
                 size=self.scene.camera.resolution,
                 scale=TRACKBALL_SCALE_AU,
-                target=EARTH_VIEW_ORIGIN,
+                target=EARTH_CENTER_ORIGIN,
             ),
         }
         self.scene.camera_transform = self.view["ball"].pose
@@ -200,7 +201,7 @@ class EarthCenteredViewer(SceneViewer):
         gl.glDisable(gl.GL_DEPTH_TEST)
 
         screen_positions = [
-            _world_to_screen_gl(_label_world_position(self.scene, body.node_name)) for body in _BODY_SCREEN_LABELS
+            _world_to_screen_gl(_label_root_position(self.scene, body.node_name)) for body in _BODY_SCREEN_LABELS
         ]
 
         gl.glMatrixMode(gl.GL_PROJECTION)
@@ -237,7 +238,7 @@ class EarthCenteredViewer(SceneViewer):
 
 def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
     eye = scene.camera_transform[:3, 3]
-    camera_distance = float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
+    camera_distance = float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
     try:
         scene_scale = float(scene.scale)
     except Exception:
@@ -251,8 +252,8 @@ def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
     return z_near, z_far
 
 
-def _label_world_position(scene: trimesh.Scene, node_name: str) -> np.ndarray:
-    transform, geometry_name = scene.graph.get(node_name, "world")
+def _label_root_position(scene: trimesh.Scene, node_name: str) -> np.ndarray:
+    transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
     mesh = scene.geometry[geometry_name]
     radius = mesh.bounding_sphere.primitive.radius
     offset = np.array([0.0, 0.0, radius * LABEL_OFFSET_BODY_RADII, 1.0])

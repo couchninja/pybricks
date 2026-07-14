@@ -1,9 +1,27 @@
 """Earth-sun and Milky Way visualization.
 
 Scene graph:
-  world -> earth_view (translates so earth stays at the origin)
-         -> milky_way (galactic center, axis, sun's galactic orbit)
-                -> solar_system (sun at origin, earth and earth orbit in ecliptic coords)
+  root_frame
+    earth_center
+      milky_way
+        solar_system
+          sun, earth, netherlands, earth_orbit, year_boundaries, earth_axis
+        galactic_center, galactic_orbit, galactic_axis
+
+The graph stacks two independent concerns:
+
+1. Coordinate frames (physical nesting). ``milky_way`` holds galactic geometry and
+   parents ``solar_system``, which uses heliocentric ecliptic coords (Sun at the
+   origin, Earth and its orbit underneath). The edge ``milky_way -> solar_system``
+   carries the ecliptic-to-galactic rotation and the Sun's galactocentric position.
+
+2. Viewer recentering (display only). ``earth_center`` translates the entire
+   subtree by ``-earth_root`` each frame so Earth stays at ``EARTH_CENTER_ORIGIN``.
+   The camera and trackball orbit that fixed origin. ``earth_center`` parents
+   ``milky_way`` not because Earth contains the galaxy, but because every body —
+   solar-system and galactic — must shift together when recentering. If galactic
+   geometry sat outside ``earth_center``, it would stay fixed in root-frame space while
+   only the solar system moved, breaking relative positions.
 
 Galactic kpc positions come from ephemeris at true scale, then multiplied by
 GALACTIC_ORBIT_DISTANCE_SCALE after kpc->AU conversion (1 = true scale; solar-system
@@ -38,10 +56,11 @@ from simulate.astronomy.constants import (
     AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
     AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     CAMERA_DISTANCE_EARTH_RADII,
+    EARTH_CENTER_FRAME,
+    EARTH_CENTER_ORIGIN,
+    EARTH_ORBIT_COLOR,
     EARTH_ORBIT_SEGMENTS,
     EARTH_RADIUS_AU,
-    EARTH_VIEW_FRAME,
-    EARTH_VIEW_ORIGIN,
     GALACTIC_AXIS_COLOR,
     GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION,
     GALACTIC_CENTER_COLOR,
@@ -53,8 +72,8 @@ from simulate.astronomy.constants import (
     MILKY_WAY_FRAME,
     NETHERLANDS_COLOR,
     NETHERLANDS_MARKER_EARTH_RADII,
-    ORBIT_COLOR,
     ORBIT_UPDATE_INTERVAL,
+    ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
     SUN_COLOR,
     SUN_RADIUS_AU,
@@ -107,7 +126,7 @@ def show_earth_sun(
 
     scene = build_earth_sun_scene(time)
     scene.set_camera(
-        center=EARTH_VIEW_ORIGIN,
+        center=EARTH_CENTER_ORIGIN,
         distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
     )
     scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
@@ -133,9 +152,9 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     if time is None:
         time = current_time()
 
-    scene = trimesh.Scene()
-    scene.graph.update(EARTH_VIEW_FRAME, "world", matrix=np.eye(4))
-    scene.graph.update(MILKY_WAY_FRAME, EARTH_VIEW_FRAME, matrix=np.eye(4))
+    scene = trimesh.Scene(base_frame=ROOT_FRAME)
+    scene.graph.update(EARTH_CENTER_FRAME, ROOT_FRAME, matrix=np.eye(4))
+    scene.graph.update(MILKY_WAY_FRAME, EARTH_CENTER_FRAME, matrix=np.eye(4))
     scene.graph.update(SOLAR_SYSTEM_FRAME, MILKY_WAY_FRAME, matrix=np.eye(4))
 
     scene.add_geometry(
@@ -181,7 +200,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     for geom_name, color in (
         ("galactic_orbit", GALACTIC_ORBIT_COLOR),
         ("galactic_axis", GALACTIC_AXIS_COLOR),
-        ("orbit", ORBIT_COLOR),
+        ("earth_orbit", EARTH_ORBIT_COLOR),
         ("year_boundaries", YEAR_BOUNDARY_COLOR),
         ("earth_axis", AXIS_COLOR),
     ):
@@ -195,6 +214,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         )
 
     update_earth_sun_scene(scene, time, None, CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU)
+    _print_scene_graph(scene)
     return scene
 
 
@@ -226,12 +246,12 @@ def update_earth_sun_scene(
         np.array([0.0, 0.0, state["galactic_axis_half_length_au"]]),
         GALACTIC_AXIS_COLOR,
     )
-    _sync_earth_view_frame(scene, state)
+    _sync_earth_center_frame(scene, state)
 
     if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
-        scene.geometry["orbit"] = _colored_path(
+        scene.geometry["earth_orbit"] = _colored_path(
             earth_orbit_ecliptic_au(time, samples=EARTH_ORBIT_SEGMENTS),
-            ORBIT_COLOR,
+            EARTH_ORBIT_COLOR,
         )
         scene.geometry["year_boundaries"] = _year_boundary_path(time)
         scene.geometry["galactic_orbit"] = _colored_path(
@@ -264,7 +284,7 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 
 def _camera_distance_au(scene: trimesh.Scene) -> float:
     eye = scene.camera_transform[:3, 3]
-    return float(np.linalg.norm(eye - EARTH_VIEW_ORIGIN))
+    return float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
 
 
 def _galactic_orbit_points(time: Time) -> np.ndarray:
@@ -295,16 +315,16 @@ def _earth_sun_state(time: Time) -> EarthSunState:
     }
 
 
-def _sync_earth_view_frame(scene: trimesh.Scene, state: EarthSunState) -> None:
-    earth_world = _earth_world_position(state)
+def _sync_earth_center_frame(scene: trimesh.Scene, state: EarthSunState) -> None:
+    earth_root = _earth_root_position(state)
     scene.graph.update(
-        frame_to=EARTH_VIEW_FRAME,
-        frame_from="world",
-        matrix=_transform_matrix(np.eye(3), -earth_world),
+        frame_to=EARTH_CENTER_FRAME,
+        frame_from=ROOT_FRAME,
+        matrix=_transform_matrix(np.eye(3), -earth_root),
     )
 
 
-def _earth_world_position(state: EarthSunState) -> np.ndarray:
+def _earth_root_position(state: EarthSunState) -> np.ndarray:
     solar_system = _transform_matrix(state["galactic_rotation"], state["sun_galactic_position"])
     earth = _transform_matrix(state["earth_rotation"], state["earth_position"])
     return (solar_system @ earth)[:3, 3]
@@ -365,6 +385,20 @@ def _color_mesh(mesh: trimesh.Trimesh, color: list[int]) -> trimesh.Trimesh:
         raise TypeError("mesh must use ColorVisuals")
     visual.face_colors = np.asarray(color, dtype=np.uint8)
     return mesh
+
+
+def _print_scene_graph(scene: trimesh.Scene) -> None:
+    parents = scene.graph.transforms.parents
+    root = scene.graph.base_frame
+
+    def print_node(node: str, indent: int) -> None:
+        print("  " * indent + node)  # noqa: T201
+        children = sorted(child for child, parent in parents.items() if parent == node)
+        for child in children:
+            print_node(child, indent + 1)
+
+    print("Scene graph:")  # noqa: T201
+    print_node(root, 0)
 
 
 if __name__ == "__main__":
