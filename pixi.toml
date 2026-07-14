@@ -15,7 +15,7 @@ stop = "python scripts/ble_control.py stop"
 upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
-earth = "python simulate/astronomy/visualization.py"
+visualize = "python simulate/astronomy/visualization.py"
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"
 
