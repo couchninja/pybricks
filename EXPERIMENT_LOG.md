@@ -161,9 +161,9 @@ TypeError:
 | Read-only: `btmgmt info`, `bluetoothctl show`, `systemctl cat bluetooth` | No changes made |
 | Runtime: `bluetoothctl disconnect` / `remove` per hub address on retry | Transient only (`hub_client/ble.py`) |
 | Runtime: register BLE broadcast via BlueZ D-Bus while scripts run | Transient; released on exit |
-| **Attempted:** systemd drop-in for `bluetoothd --experimental` | **Did not apply** — `sudo` failed or was blocked; `/etc/systemd/system/bluetooth.service.d/experimental.conf` not present |
+| **Attempted:** systemd drop-in for `bluetoothd --experimental` | Tried during broadcast debugging; **not required** for GATT stdin. Drop-in removed; stock `bluetoothd` confirmed working. |
 
-No persistent Bluetooth or system configuration outside this repo was changed.
+No persistent Bluetooth or system configuration outside this repo is required.
 
 ---
 
@@ -247,5 +247,8 @@ read_line()        ◄──GATT stdout──  print("<seq> <response>")
 
 Removed: `hub_client/broadcast.py`, `pb_ble_import.py`, `constants.py`,
 `pybricks-ble` / `dbus-fast` deps, and broadcast-era `scripts/debug_*.py`.
+
+BlueZ `--experimental` is **not** needed; verified working with stock
+`bluetoothd` after removing the experimental systemd drop-in.
 
 **Verify:** `pixi run test`, `pixi run starpoint`

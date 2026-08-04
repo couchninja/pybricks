@@ -6,7 +6,7 @@ Pybricks-like API (`Motor.dc()`, `sensor.distance()`, `hub.light.on()`, etc.).
 
 Communication stays on the GATT connection the whole time: commands are written
 to hub stdin, responses come back on stdout. BLE advertising/scanning on the PC
-is not required.
+is not required, and BlueZ does not need `--experimental`.
 
 ## Flash Pybricks firmware
 
