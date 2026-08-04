@@ -167,18 +167,10 @@ No persistent Bluetooth or system configuration outside this repo was changed.
 
 ---
 
-## 8. Debug scripts created
+## 8. Debug scripts
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/debug_connected.py` | Broadcast commands while GATT stays connected; read stdout |
-| `scripts/debug_ping.py` | Minimal ping test |
-| `scripts/debug_light.py` | Light command test |
-| `scripts/debug_scan.py` | Scan for hub advertisements |
-| `scripts/debug_loopback.py` | Check if PC can see its own Pybricks broadcasts |
-| `scripts/debug_reconnect.py` | Reconnection behavior |
-
-Temporary `pybricks/debug_minimal.py` was used for hub-side bisection and then deleted.
+Broadcast-era scripts under `scripts/debug_*.py` were removed after the GATT
+stdin switch. Use `pixi run test` / `pixi run starpoint` for verification.
 
 ---
 
@@ -228,33 +220,32 @@ Temporary `pybricks/debug_minimal.py` was used for hub-side bisection and then d
 
 ---
 
-## 11. Known limitations (as of end of session)
+## 11. Known limitations (as of GATT stdin switch)
 
-1. **PC cannot observe Pybricks BLE advertisements** on this Intel adapter — hybrid
-   transport avoids that requirement.
-2. **Move Hub has no stdin** — GATT stdin/stdout command path is not viable.
+1. **PC cannot register or observe Pybricks BLE advertisements** on this Intel
+   adapter (`Invalid Parameters 0x0d`) — do not rely on BlueZ LE advertising.
+2. **Move Hub has no blocking `input()` / `usys.stdin`** — use
+   `pybricks.tools.read_input_byte()` and assemble lines on the hub.
 3. **Hub command handler must avoid list/slice function arguments** after device
    init — use string parameters.
-4. **BLE command broadcast is limited to 26 bytes** (Pybricks adv encoding).
-   The full string `<seq> <command> …` must fit; use short wire names and
-   positional args (see §10, `pybricks/main.py` module docstring).
-5. README troubleshooting section is partly stale (still mentions disconnect-before-test
-   and active scanning in places); architecture section at top is accurate.
-6. Hub may appear under more than one BLE address over time; use `-n` to target
+4. Hub may appear under more than one BLE address over time; use `-n` to target
    a specific hub if multiple are visible.
 
 ---
 
-## Final working stack
+## 12. GATT stdin transport (current)
+
+BLE broadcast for commands failed permanently on this machine. Final design:
 
 ```
 Linux (hub_client)                    Move Hub (pybricks/main.py)
 ─────────────────                    ───────────────────────────
 MoveHub.connect()  ──GATT──────────►  program running, print("ready")
-CommandBroadcaster ──BLE ch.7──────►  radio.observe(7) → handle_command
+write_line()       ──GATT stdin────►  read_input_byte() → handle_command
 read_line()        ◄──GATT stdout──  print("<seq> <response>")
 ```
 
-Wire format example: `2 motor.stall B 100 30` (must stay within 26-byte limit).
+Removed: `hub_client/broadcast.py`, `pb_ble_import.py`, `constants.py`,
+`pybricks-ble` / `dbus-fast` deps, and broadcast-era `scripts/debug_*.py`.
 
 **Verify:** `pixi run test`, `pixi run starpoint`

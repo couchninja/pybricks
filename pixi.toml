@@ -22,18 +22,9 @@ micropython = ">=1.28.0,<2"
 python = ">=3.13,<3.14"
 
 [pypi-dependencies]
-# Host-side API stubs for editing hub programs (BLERadio, Color, etc.).
+# Host-side API stubs for editing hub programs (Color, Port, etc.).
 pybricks = "==4.0.0"
 pybricksdev = "==2.3.2"
-# Broadcast/observe helpers; pins pybricks 3.6.1 via git (see override below).
-pybricks-ble = { git = "https://github.com/fkleon/pybricks-ble.git" }
-dbus-fast = ">=5.0"
 trimesh = ">=4.0"
 scipy = ">=1.18.0"
 pyglet = ">=1.5.31,<2.0"
-
-# pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
-# override, pixi cannot install pybricks 4.0.0 from PyPI alongside pybricks-ble.
-# hub_client/pb_ble_import.py works around pybricks-ble's broken __init__ on 4.x.
-[pypi-options.dependency-overrides]
-pybricks = "==4.0.0"
