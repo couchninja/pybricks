@@ -1,0 +1,200 @@
+import numpy as np
+from astropy import units as u
+from astropy.coordinates import (
+    GCRS,
+    ITRS,
+    BarycentricMeanEcliptic,
+    CartesianRepresentation,
+    EarthLocation,
+    Galactocentric,
+    SkyCoord,
+    get_body_barycentric,
+)
+from astropy.time import Time
+from scipy.spatial.transform import Rotation
+
+NETHERLANDS_LAT = 52.1326 * u.deg
+NETHERLANDS_LON = 5.2913 * u.deg
+
+
+def earth_orientation_matrix(time: Time) -> np.ndarray:
+    spin_axis = earth_spin_axis_ecliptic(time)
+    netherlands_dir = netherlands_direction_ecliptic(time)
+    netherlands_local = netherlands_direction_itrs(time)
+    rotation = Rotation.align_vectors(
+        [spin_axis, netherlands_dir],
+        [np.array([0.0, 0.0, 1.0]), netherlands_local],
+    )[0]
+    return rotation.as_matrix()
+
+
+def earth_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
+    times = time + np.linspace(-0.5, 0.5, samples, endpoint=False) * u.year
+    earth = get_body_barycentric("earth", times)
+    sun = get_body_barycentric("sun", times)
+    relative = SkyCoord(
+        earth - sun,
+        representation_type="cartesian",
+        frame="icrs",
+    ).transform_to(BarycentricMeanEcliptic())
+    cartesian = relative.cartesian
+    return np.column_stack(
+        [
+            cartesian.x.to_value(u.au),
+            cartesian.y.to_value(u.au),
+            cartesian.z.to_value(u.au),
+        ]
+    )
+
+
+def earth_year_boundary_positions_ecliptic_au(time: Time) -> np.ndarray:
+    """Earth positions at calendar Jan 1 dates within ±0.5 Julian years of ``time``.
+
+    Returns one heliocentric ecliptic position (AU) per Jan 1 in
+    ``[time - 0.5 year, time + 0.5 year)``. Usually exactly one; occasionally
+    zero for a narrow band around mid-year. Julian years are 365.25 days while
+    calendar years are 365/366 days, so the half-open window can fall strictly
+    between two consecutive Jan 1 instants (both excluded by ``start <= boundary
+    < end``).
+    """
+    start = time - 0.5 * u.year
+    end = time + 0.5 * u.year
+    start_year = int(np.floor(start.decimalyear))
+    end_year = int(np.ceil(end.decimalyear))
+    positions = []
+    for year in range(start_year, end_year + 1):
+        boundary = Time(f"{year}-01-01", scale=time.scale, format="iso")
+        if start <= boundary < end:
+            positions.append(earth_heliocentric_ecliptic_au(boundary))
+    return np.array(positions, dtype=float)
+
+
+def earth_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
+    earth = get_body_barycentric("earth", time)
+    sun = get_body_barycentric("sun", time)
+    return _heliocentric_ecliptic_au(earth, sun)
+
+
+def sun_galactocentric_kpc(time: Time) -> np.ndarray:
+    sun = get_body_barycentric("sun", time)
+    galactic = SkyCoord(
+        sun,
+        representation_type="cartesian",
+        frame="icrs",
+    ).transform_to(Galactocentric())
+    cartesian = galactic.cartesian
+    return np.array(
+        [
+            cartesian.x.to_value(u.kpc),
+            cartesian.y.to_value(u.kpc),
+            cartesian.z.to_value(u.kpc),
+        ],
+        dtype=float,
+    )
+
+
+def sun_galactic_orbit_kpc(time: Time, samples: int = 360) -> np.ndarray:
+    sun_position = sun_galactocentric_kpc(time)
+    radius = np.hypot(sun_position[0], sun_position[1])
+    theta = np.linspace(0, 2 * np.pi, samples, endpoint=False)
+    return np.column_stack(
+        [
+            radius * np.cos(theta),
+            radius * np.sin(theta),
+            np.zeros(samples, dtype=float),
+        ]
+    )
+
+
+def ecliptic_to_galactocentric_rotation(time: Time) -> np.ndarray:
+    return np.column_stack(
+        [
+            _ecliptic_direction_galactocentric(np.array([1.0, 0.0, 0.0]), time),
+            _ecliptic_direction_galactocentric(np.array([0.0, 1.0, 0.0]), time),
+            _ecliptic_direction_galactocentric(np.array([0.0, 0.0, 1.0]), time),
+        ]
+    )
+
+
+def earth_spin_axis_ecliptic(time: Time) -> np.ndarray:
+    return _gcrs_unit_vector_to_ecliptic(earth_spin_axis_gcrs(time), time)
+
+
+def netherlands_direction_ecliptic(time: Time) -> np.ndarray:
+    return _gcrs_unit_vector_to_ecliptic(netherlands_direction_gcrs(time), time)
+
+
+def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
+    north_pole = ITRS(x=0 * u.m, y=0 * u.m, z=1 * u.m, obstime=time)
+    gcrs = north_pole.transform_to(GCRS(obstime=time))
+    direction = np.array(gcrs.cartesian.xyz.value, dtype=float)
+    return direction / np.linalg.norm(direction)
+
+
+def netherlands_direction_gcrs(time: Time) -> np.ndarray:
+    location = EarthLocation.from_geodetic(
+        lat=NETHERLANDS_LAT,
+        lon=NETHERLANDS_LON,
+    )
+    gcrs = location.get_gcrs(time)
+    direction = np.array(gcrs.cartesian.xyz.value, dtype=float)
+    return direction / np.linalg.norm(direction)
+
+
+def netherlands_direction_itrs(time: Time) -> np.ndarray:
+    location = EarthLocation.from_geodetic(
+        lat=NETHERLANDS_LAT,
+        lon=NETHERLANDS_LON,
+    )
+    itrs = location.get_itrs(time)
+    direction = np.array(itrs.cartesian.xyz.value, dtype=float)
+    return direction / np.linalg.norm(direction)
+
+
+def current_time() -> Time:
+    return Time.now()
+
+
+def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepresentation) -> np.ndarray:
+    relative = SkyCoord(
+        earth - sun,
+        representation_type="cartesian",
+        frame="icrs",
+    ).transform_to(BarycentricMeanEcliptic())
+    cartesian = relative.cartesian
+    return np.array(
+        [
+            cartesian.x.to_value(u.au),
+            cartesian.y.to_value(u.au),
+            cartesian.z.to_value(u.au),
+        ],
+        dtype=float,
+    )
+
+
+def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.ndarray:
+    sun_galactic = sun_galactocentric_kpc(time)
+    ecliptic = BarycentricMeanEcliptic(
+        x=vector[0] * u.kpc,
+        y=vector[1] * u.kpc,
+        z=vector[2] * u.kpc,
+        representation_type="cartesian",
+    )
+    gcrs = ecliptic.transform_to(GCRS(obstime=time))
+    galactic = SkyCoord(gcrs, representation_type="cartesian").transform_to(Galactocentric())
+    direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
+    direction -= sun_galactic
+    return direction / np.linalg.norm(direction)
+
+
+def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
+    gcrs = GCRS(
+        x=vector[0] * u.one,
+        y=vector[1] * u.one,
+        z=vector[2] * u.one,
+        obstime=time,
+        representation_type="cartesian",
+    )
+    ecliptic = gcrs.transform_to(BarycentricMeanEcliptic())
+    direction = np.array(ecliptic.cartesian.xyz.value, dtype=float)
+    return direction / np.linalg.norm(direction)

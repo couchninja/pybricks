@@ -67,9 +67,7 @@ class _CommandSession:
                         if not next_line:
                             break
                         lines.append(next_line)
-                    raise HubClientError(
-                        "hub program error:\n" + "\n".join(lines)
-                    )
+                    raise HubClientError("hub program error:\n" + "\n".join(lines))
 
                 parts = line.split(None, 1)
                 if not parts or parts[0] != seq:
@@ -150,9 +148,7 @@ class Motor:
         rotation_angle: float,
         then: Stop = Stop.HOLD,
     ) -> None:
-        parts = [
-            f"mtr.rang {self.port.name} {int(speed)} {int(rotation_angle)}"
-        ]
+        parts = [f"mtr.rang {self.port.name} {int(speed)} {int(rotation_angle)}"]
         if then != Stop.HOLD:
             parts.append(then.name)
         await self._session.call(" ".join(parts), timeout=120.0)
@@ -163,9 +159,7 @@ class Motor:
         target_angle: float,
         then: Stop = Stop.HOLD,
     ) -> None:
-        parts = [
-            f"mtr.rtgt {self.port.name} {int(speed)} {int(target_angle)}"
-        ]
+        parts = [f"mtr.rtgt {self.port.name} {int(speed)} {int(target_angle)}"]
         if then != Stop.HOLD:
             parts.append(then.name)
         await self._session.call(" ".join(parts), timeout=120.0)
