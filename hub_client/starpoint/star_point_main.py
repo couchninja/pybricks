@@ -14,29 +14,42 @@ async def star_point_main(upload_program: bool = False):
         await hub.ping()
         print("Hub responded to ping.")
 
-        gear_ratio = 1 / 5
+        pan_gear_ratio = 1 / 5
+        tilt_gear_ratio = 1
 
         # rotate motor B until it is stuck
-        motor = hub.motor(Port.B)
+        motorPan = hub.motor(Port.B)
+        motorTilt = hub.motor(Port.C)
         # duty_limit 50 for non-geared base
-        angle = await motor.run_until_stalled(100, duty_limit=50)
+        pan_angle = await motorPan.run_until_stalled(100, duty_limit=50)
+        tilt_angle = await motorTilt.run_until_stalled(-100, duty_limit=50)
 
-        print(f"Motor stalled at angle {angle * gear_ratio} degrees.")
+        print(f"Pan motor stalled at angle {pan_angle * pan_gear_ratio} degrees.")
+        print(f"Tilt motor stalled at angle {pan_angle * pan_gear_ratio} degrees.")
 
         # Define the stall point as zero
-        await motor.reset_angle(20)
+        await motorPan.reset_angle(20)
+        await motorTilt.reset_angle(-10)
 
         while True:
-            await motor.run_target(1200, target_angle=-90 / gear_ratio)
-            angle = await motor.angle()
-            print(f"Motor angle: {angle * gear_ratio} degrees.")
+            await motorPan.run_target(1200, target_angle=-90 / pan_gear_ratio)
+            pan_angle = await motorPan.angle()
+            print(f"Pan motor angle: {pan_angle * pan_gear_ratio} degrees.")
 
+            await motorTilt.run_target(1200, target_angle=90 / tilt_gear_ratio)
+            tilt_angle = await motorTilt.angle()
+            print(f"Tilt motor angle: {tilt_angle * tilt_gear_ratio} degrees.")
             await asyncio.sleep(3)
-            await motor.run_target(1200, target_angle=-180 / gear_ratio)
-            angle = await motor.angle()
-            print(f"Motor angle: {angle * gear_ratio} degrees.")
+
+            await motorPan.run_target(1200, target_angle=-180 / pan_gear_ratio)
+            pan_angle = await motorPan.angle()
+            print(f"Pan motor angle: {pan_angle * pan_gear_ratio} degrees.")
+
+            await motorTilt.run_target(1200, target_angle=180 / tilt_gear_ratio)
+            tilt_angle = await motorTilt.angle()
+            print(f"Tilt motor angle: {tilt_angle * tilt_gear_ratio} degrees.")
             await asyncio.sleep(3)
 
 
 if __name__ == "__main__":
-    asyncio.run(star_point_main(upload_program=True))
+    asyncio.run(star_point_main(upload_program=False))
