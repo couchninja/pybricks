@@ -11,31 +11,10 @@ from pybricks.parameters import Color, Direction, Port, Stop
 from pybricksdev.connections.pybricks import PybricksHubBLE
 
 from hub_client.ble import RECOVERABLE_ERRORS, connect, disconnect_hub
-from hub_client.broadcast import CommandBroadcaster, open_broadcaster
-from hub_client.constants import COMMAND_CHANNEL
-from hub_client.pb_ble_import import load_bluezdbus
-
-load_bluezdbus()
-from pb_ble.messages import OBSERVED_DATA_MAX_SIZE, encode_message  # noqa: E402
 
 
 class HubClientError(RuntimeError):
     """Raised when the hub returns an error response."""
-
-
-class BroadcastPayloadTooLargeError(HubClientError):
-    """Raised when a command cannot fit in a Pybricks BLE advertisement."""
-
-
-def _ensure_broadcast_fits(message: str) -> None:
-    """Reject commands that exceed the Pybricks BLE advertisement size limit."""
-    try:
-        encode_message(COMMAND_CHANNEL, message)
-    except ValueError as exc:
-        raise BroadcastPayloadTooLargeError(
-            f"command exceeds BLE broadcast limit ({OBSERVED_DATA_MAX_SIZE} bytes): "
-            f"{message!r}"
-        ) from exc
 
 
 def _color_name(color: Color) -> str:
@@ -46,8 +25,7 @@ def _color_name(color: Color) -> str:
 
 
 class _CommandSession:
-    def __init__(self, broadcaster: CommandBroadcaster, ble_hub: PybricksHubBLE):
-        self._broadcaster = broadcaster
+    def __init__(self, ble_hub: PybricksHubBLE):
         self._ble_hub = ble_hub
         self._lock = asyncio.Lock()
         self._seq = 0
@@ -59,13 +37,17 @@ class _CommandSession:
             self._seq += 1
             seq = str(self._seq)
             wire_message = f"{seq} {command}"
-            _ensure_broadcast_fits(wire_message)
-            await self._broadcaster.broadcast(wire_message)
+            await self._ble_hub.write_line(wire_message)
 
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 try:
-                    line = (await self._ble_hub.read_line()).strip()
+                    remaining = max(0.05, deadline - time.monotonic())
+                    line = (
+                        await asyncio.wait_for(
+                            self._ble_hub.read_line(), timeout=min(1.0, remaining)
+                        )
+                    ).strip()
                 except Exception:
                     await asyncio.sleep(0.05)
                     continue
@@ -258,7 +240,7 @@ class MoveHub:
         program: str | None = "pybricks/main.py",
         retries: int = 5,
     ) -> AsyncIterator[MoveHub]:
-        """Deploy over GATT, stay connected; commands via broadcast, replies via stdout."""
+        """Deploy over GATT; commands via stdin write, replies via stdout."""
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
@@ -267,8 +249,6 @@ class MoveHub:
                 ) as remote:
                     yield remote
                 return
-            except BroadcastPayloadTooLargeError:
-                raise
             except (*RECOVERABLE_ERRORS, HubClientError) as exc:
                 last_error = exc
                 if attempt < retries:
@@ -308,7 +288,9 @@ class MoveHub:
             ready = False
             for _ in range(30):
                 try:
-                    line = (await ble_hub.read_line()).strip()
+                    line = (
+                        await asyncio.wait_for(ble_hub.read_line(), timeout=1.0)
+                    ).strip()
                     if line == "ready" or line.endswith("ready"):
                         ready = True
                         break
@@ -317,17 +299,16 @@ class MoveHub:
             if not ready:
                 raise HubClientError("hub did not report ready")
 
-            async with open_broadcaster() as broadcaster:
-                session = _CommandSession(broadcaster, ble_hub)
-                remote = cls(session)
-                await remote.ping()
+            session = _CommandSession(ble_hub)
+            remote = cls(session)
+            await remote.ping()
+            try:
+                yield remote
+            finally:
                 try:
-                    yield remote
-                finally:
-                    try:
-                        await ble_hub.stop_user_program()
-                    except Exception:
-                        pass
+                    await ble_hub.stop_user_program()
+                except Exception:
+                    pass
         finally:
             try:
                 await disconnect_hub(ble_hub)

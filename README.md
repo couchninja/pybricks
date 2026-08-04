@@ -4,9 +4,9 @@ The Move Hub runs a thin BLE server that forwards commands directly to motors,
 sensors, and the hub light. This Linux machine connects over BLE and exposes a
 Pybricks-like API (`Motor.dc()`, `sensor.distance()`, `hub.light.on()`, etc.).
 
-Communication uses a hybrid transport: commands are BLE-broadcast on channel 7,
-responses come back over the GATT connection (stdout). The host stays connected
-during control, so BLE scanning on the PC is not required.
+Communication stays on the GATT connection the whole time: commands are written
+to hub stdin, responses come back on stdout. BLE advertising/scanning on the PC
+is not required.
 
 ## Flash Pybricks firmware
 
@@ -103,4 +103,4 @@ asyncio.run(main())
 - **Upload fails or disconnects**: Run `pixi run stop`, wait a moment, then try `pixi run run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
 - **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again.
 - **Passive scan / BleakError on Linux**: Active scanning is used by default. If scanning still fails, ensure Bluetooth is enabled and no other app is using the adapter.
-- **Commands time out**: The Move Hub cannot broadcast while connected over GATT. Run `pixi run run` (which disconnects automatically) or `pixi run stop` before using `pixi run test`. Close Pybricks Code and other BLE connections too.
+- **Commands time out**: Make sure the hub program is the latest upload (`pixi run run` or reconnect with upload). Close Pybricks Code and other BLE connections to the hub.

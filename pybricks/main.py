@@ -1,26 +1,17 @@
 """Thin BLE command server for the Move Hub.
 
-Commands arrive on COMMAND_CHANNEL via BLERadio. Responses go to stdout
-(GATT) so the host can read them without BLE scanning.
+Commands arrive on stdin over the existing GATT connection
+(``PybricksHub.write_line`` on the host). Responses go to stdout so the
+host can read them with ``read_line``.
 
-BLE broadcast payload limit
----------------------------
-The host sends commands as a single BLE advertisement string (seq + command).
-Pybricks encoding allows at most **26 bytes** total (channel byte + payload).
-Long command names or keyword-style args will fail on the PC before the hub
-sees them (``ValueError: Payload too large`` from ``pb_ble``).
-
-Keep wire names short and use positional args, e.g. ``mtr.stall B 100 30``
-not ``motor.run_until_stalled B 100 duty_limit=30``. See EXPERIMENT_LOG.md §10.
+Move Hub has no ``usys.stdin`` / blocking ``input()``; use
+``read_input_byte`` instead.
 """
 
 from pybricks.hubs import MoveHub
-from pybricks.messaging import BLERadio
 from pybricks.parameters import Color, Direction, Port, Stop
 from pybricks.pupdevices import ColorDistanceSensor, Motor
-from pybricks.tools import wait
-
-COMMAND_CHANNEL = 7
+from pybricks.tools import read_input_byte, wait
 
 MOTOR_PORTS = {
     "A": (Port.A, Direction.CLOCKWISE),
@@ -62,12 +53,6 @@ def color_name(color):
 
 def reply(seq, line):
     print(str(seq) + " " + line)
-
-
-def command_line(cmd):
-    if isinstance(cmd, tuple):
-        return " ".join(str(part) for part in cmd)
-    return str(cmd)
 
 
 def parse_stop(value):
@@ -183,7 +168,22 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4=""):
         reply(seq, "err " + type(exc).__name__ + ":" + str(exc))
 
 
-radio = BLERadio(observe_channels=[COMMAND_CHANNEL])
+def read_line():
+    # Move Hub: read_input_byte(chr=True) does not work; use int + chr().
+    buf = ""
+    while True:
+        b = read_input_byte()
+        if b is None:
+            wait(10)
+            continue
+        if b == 10 or b == 13:
+            if buf:
+                return buf
+            continue
+        if b >= 32 and b < 127:
+            buf += chr(b)
+
+
 hub = MoveHub()
 motors = {}
 for port_name, (port, direction) in MOTOR_PORTS.items():
@@ -197,14 +197,9 @@ hub.light.on(Color.GREEN)
 print("ready")
 
 while True:
-    cmd = radio.observe(COMMAND_CHANNEL)
-    if cmd is None:
-        wait(10)
-        continue
-
-    parts = command_line(cmd).split()
+    line = read_line()
+    parts = line.split()
     if len(parts) < 2:
-        wait(10)
         continue
 
     if len(parts) > 5:
@@ -217,4 +212,3 @@ while True:
         handle_command(parts[0], parts[1], parts[2])
     else:
         handle_command(parts[0], parts[1])
-    wait(10)
