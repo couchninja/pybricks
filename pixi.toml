@@ -15,7 +15,10 @@ stop = "python scripts/ble_control.py stop"
 upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
-cube = "python tests/visualize_cube.py"
+visualize = "python simulate/astronomy/visualization.py"
+visualize-watch = "python -m watchfiles --filter python \"python simulate/astronomy/visualization.py\" simulate/astronomy/"
+precommit = "pre-commit run --all-files"
+precommit-install = "pre-commit install"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
@@ -28,3 +31,15 @@ pybricksdev = "==2.3.2"
 trimesh = ">=4.0"
 scipy = ">=1.18.0"
 pyglet = ">=1.5.31,<2.0"
+astropy = ">=7.0"
+pre-commit = ">=4.0"
+ruff = "==0.14.14"
+ty = "==0.0.14"
+watchfiles = ">=1.0"
+
+
+# pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
+# override, pixi cannot install pybricks 4.0.0 from PyPI alongside pybricks-ble.
+# hub_client/pb_ble_import.py works around pybricks-ble's broken __init__ on 4.x.
+[pypi-options.dependency-overrides]
+pybricks = "==4.0.0"
