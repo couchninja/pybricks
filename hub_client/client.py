@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from pybricks.parameters import Color, Direction, Port, Stop
 from pybricksdev.connections.pybricks import PybricksHubBLE
@@ -24,6 +24,11 @@ def _color_name(color: Color) -> str:
     raise HubClientError(f"unsupported color: {color!r}")
 
 
+async def _read_line(ble_hub: PybricksHubBLE, timeout: float) -> str:
+    line = await asyncio.wait_for(ble_hub.read_line(), timeout=timeout)
+    return line.strip()
+
+
 class _CommandSession:
     def __init__(self, ble_hub: PybricksHubBLE):
         self._ble_hub = ble_hub
@@ -36,19 +41,14 @@ class _CommandSession:
         async with self._lock:
             self._seq += 1
             seq = str(self._seq)
-            wire_message = f"{seq} {command}"
-            await self._ble_hub.write_line(wire_message)
+            await self._ble_hub.write_line(f"{seq} {command}")
 
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 try:
                     remaining = max(0.05, deadline - time.monotonic())
-                    line = (
-                        await asyncio.wait_for(
-                            self._ble_hub.read_line(), timeout=min(1.0, remaining)
-                        )
-                    ).strip()
-                except Exception:
+                    line = await _read_line(self._ble_hub, min(1.0, remaining))
+                except (TimeoutError, *RECOVERABLE_ERRORS):
                     await asyncio.sleep(0.05)
                     continue
 
@@ -58,8 +58,11 @@ class _CommandSession:
                     lines = [line]
                     while time.monotonic() < deadline:
                         try:
-                            next_line = (await self._ble_hub.read_line()).strip()
-                        except Exception:
+                            remaining = max(0.05, deadline - time.monotonic())
+                            next_line = await _read_line(
+                                self._ble_hub, min(1.0, remaining)
+                            )
+                        except (TimeoutError, *RECOVERABLE_ERRORS):
                             break
                         if not next_line:
                             break
@@ -113,10 +116,10 @@ class Motor:
         self.port = port
         self.positive_direction = positive_direction
 
-    async def dc(self, duty: int | float) -> None:
+    async def dc(self, duty: float) -> None:
         await self._session.call(f"mtr.dc {self.port.name} {int(duty)}")
 
-    async def run(self, speed: int | float) -> None:
+    async def run(self, speed: float) -> None:
         await self._session.call(f"mtr.run {self.port.name} {int(speed)}")
 
     async def stop(self) -> None:
@@ -143,8 +146,8 @@ class Motor:
 
     async def run_angle(
         self,
-        speed: int | float,
-        rotation_angle: int | float,
+        speed: float,
+        rotation_angle: float,
         then: Stop = Stop.HOLD,
     ) -> None:
         parts = [
@@ -156,8 +159,8 @@ class Motor:
 
     async def run_target(
         self,
-        speed: int | float,
-        target_angle: int | float,
+        speed: float,
+        target_angle: float,
         then: Stop = Stop.HOLD,
     ) -> None:
         parts = [
@@ -169,9 +172,9 @@ class Motor:
 
     async def run_until_stalled(
         self,
-        speed: int | float,
+        speed: float,
         then: Stop = Stop.COAST,
-        duty_limit: int | float | None = None,
+        duty_limit: float | None = None,
     ) -> int:
         parts = [f"mtr.stall {self.port.name} {int(speed)}"]
         if duty_limit is not None:
@@ -274,7 +277,7 @@ class MoveHub:
                 try:
                     await ble_hub.stop_user_program()
                     await asyncio.sleep(0.5)
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
                 await ble_hub.download(program)
 
@@ -288,29 +291,26 @@ class MoveHub:
             ready = False
             for _ in range(30):
                 try:
-                    line = (
-                        await asyncio.wait_for(ble_hub.read_line(), timeout=1.0)
-                    ).strip()
+                    line = await _read_line(ble_hub, 1.0)
                     if line == "ready" or line.endswith("ready"):
                         ready = True
                         break
-                except Exception:
+                except (TimeoutError, *RECOVERABLE_ERRORS):
                     await asyncio.sleep(0.1)
             if not ready:
                 raise HubClientError("hub did not report ready")
 
-            session = _CommandSession(ble_hub)
-            remote = cls(session)
+            remote = cls(_CommandSession(ble_hub))
             await remote.ping()
             try:
                 yield remote
             finally:
                 try:
                     await ble_hub.stop_user_program()
-                except Exception:
+                except RECOVERABLE_ERRORS:
                     pass
         finally:
             try:
                 await disconnect_hub(ble_hub)
-            except Exception:
+            except RECOVERABLE_ERRORS:
                 pass

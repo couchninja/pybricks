@@ -1,5 +1,6 @@
-from pybricks.parameters import Port
 import asyncio
+
+from pybricks.parameters import Port
 
 from hub_client import MoveHub
 
@@ -38,4 +39,4 @@ async def star_point_main(upload_program: bool = False):
 
 
 if __name__ == "__main__":
-    asyncio.run(star_point_main(upload_program=False))
+    asyncio.run(star_point_main(upload_program=True))
