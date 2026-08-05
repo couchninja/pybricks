@@ -19,6 +19,9 @@ visualize = "python simulate/astronomy/visualization.py"
 visualize-watch = "python -m watchfiles --filter python \"python simulate/astronomy/visualization.py\" simulate/astronomy/"
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"
+# Survives reboot
+bluetooth-off = "sudo systemctl disable --now bluetooth"
+bluetooth-on = "sudo systemctl enable --now bluetooth"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
