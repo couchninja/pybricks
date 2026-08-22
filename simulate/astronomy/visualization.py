@@ -5,7 +5,7 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, netherlands, earth_orbit, year_boundaries, earth_axis
+          sun, earth, observer, earth_orbit, year_boundaries, earth_axis
         galactic_center, galactic_orbit, galactic_axis
 
 The graph stacks two independent concerns:
@@ -70,8 +70,8 @@ from simulate.astronomy.constants import (
     KPC_TO_AU,
     LINE_WIDTH_PIXELS,
     MILKY_WAY_FRAME,
-    NETHERLANDS_COLOR,
-    NETHERLANDS_MARKER_EARTH_RADII,
+    OBSERVER_COLOR,
+    OBSERVER_MARKER_EARTH_RADII,
     ORBIT_UPDATE_INTERVAL,
     ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
@@ -89,7 +89,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
-    netherlands_direction_ecliptic,
+    observer_direction_ecliptic,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
@@ -107,7 +107,7 @@ class EarthSunState(TypedDict):
     earth_position: np.ndarray
     earth_rotation: np.ndarray
     spin_axis: np.ndarray
-    netherlands_position: np.ndarray
+    observer_position: np.ndarray
     galactic_rotation: np.ndarray
     sun_galactic_position: np.ndarray
     galactic_axis_half_length_au: float
@@ -177,13 +177,13 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     scene.add_geometry(
         _color_mesh(
             trimesh.creation.icosphere(
-                radius=NETHERLANDS_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
+                radius=OBSERVER_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
                 subdivisions=2,
             ),
-            NETHERLANDS_COLOR,
+            OBSERVER_COLOR,
         ),
-        geom_name="netherlands",
-        node_name="netherlands",
+        geom_name="observer",
+        node_name="observer",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
@@ -236,9 +236,9 @@ def update_earth_sun_scene(
         matrix=_transform_matrix(state["earth_rotation"], state["earth_position"]),
     )
     scene.graph.update(
-        "netherlands",
+        "observer",
         SOLAR_SYSTEM_FRAME,
-        matrix=_transform_matrix(np.eye(3), state["netherlands_position"]),
+        matrix=_transform_matrix(np.eye(3), state["observer_position"]),
     )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
     scene.geometry["galactic_axis"] = _segment_path(
@@ -295,7 +295,7 @@ def _galactic_orbit_points(time: Time) -> np.ndarray:
 def _earth_sun_state(time: Time) -> EarthSunState:
     earth_position = earth_heliocentric_ecliptic_au(time)
     spin_axis = earth_spin_axis_ecliptic(time)
-    netherlands_dir = netherlands_direction_ecliptic(time)
+    observer_dir = observer_direction_ecliptic(time)
 
     sun_galactic_kpc = sun_galactocentric_kpc(time)
     sun_galactic_distance_kpc = np.linalg.norm(sun_galactic_kpc)
@@ -307,7 +307,7 @@ def _earth_sun_state(time: Time) -> EarthSunState:
         "earth_position": earth_position,
         "earth_rotation": earth_orientation_matrix(time),
         "spin_axis": spin_axis,
-        "netherlands_position": earth_position + netherlands_dir * EARTH_RADIUS_AU,
+        "observer_position": earth_position + observer_dir * EARTH_RADIUS_AU,
         "galactic_rotation": ecliptic_to_galactocentric_rotation(time),
         "sun_galactic_position": sun_galactic_position,
         "galactic_axis_half_length_au": (sun_galactic_distance_au * GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION),
@@ -390,6 +390,8 @@ def _color_mesh(mesh: trimesh.Trimesh, color: list[int]) -> trimesh.Trimesh:
 def _print_scene_graph(scene: trimesh.Scene) -> None:
     parents = scene.graph.transforms.parents
     root = scene.graph.base_frame
+    if not isinstance(root, str):
+        raise TypeError("scene graph base_frame must be a str")
 
     def print_node(node: str, indent: int) -> None:
         print("  " * indent + node)  # noqa: T201
@@ -402,7 +404,7 @@ def _print_scene_graph(scene: trimesh.Scene) -> None:
 
 
 if __name__ == "__main__":
-    # show_earth_sun()
-    show_earth_sun(time_scaling=86_400)  # 1 day per second
+    show_earth_sun()
+    # show_earth_sun(time_scaling=86_400)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
