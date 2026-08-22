@@ -13,6 +13,14 @@ from astropy.coordinates import (
 from astropy.time import Time
 from scipy.spatial.transform import Rotation
 
+from simulate.astronomy.constants import (
+    EARTH_RADIUS_AU,
+    KPC_TO_AU,
+    OBSERVER_MOTION_MODES,
+    SIDEREAL_DAY,
+    SOLAR_GALACTIC_ORBITAL_SPEED,
+)
+
 # Netherlands
 OBSERVER_LAT = 52.1326 * u.deg
 OBSERVER_LON = 5.2913 * u.deg
@@ -156,6 +164,20 @@ def current_time() -> Time:
     return Time.now()
 
 
+def observer_velocity_ecliptic_au_per_s(time: Time, mode: str) -> np.ndarray:
+    if mode not in OBSERVER_MOTION_MODES:
+        raise ValueError(f"unknown observer motion mode: {mode}")
+
+    velocity = np.zeros(3, dtype=float)
+    if mode in ("earth_rotation", "sun_orbit", "milky_way_orbit"):
+        velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
+    if mode in ("sun_orbit", "milky_way_orbit"):
+        velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
+    if mode == "milky_way_orbit":
+        velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
+    return velocity
+
+
 def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepresentation) -> np.ndarray:
     relative = SkyCoord(
         earth - sun,
@@ -186,6 +208,38 @@ def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.nda
     direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
     direction -= sun_galactic
     return direction / np.linalg.norm(direction)
+
+
+def _earth_rotation_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    spin_axis = earth_spin_axis_ecliptic(time)
+    observer_dir = observer_direction_ecliptic(time)
+    angular_speed = (2 * np.pi / SIDEREAL_DAY).to_value(1 / u.s)
+    omega = angular_speed * spin_axis
+    radius = EARTH_RADIUS_AU * observer_dir
+    return np.cross(omega, radius)
+
+
+def _earth_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    delta = 1 * u.hour
+    position_before = earth_heliocentric_ecliptic_au(time - delta)
+    position_after = earth_heliocentric_ecliptic_au(time + delta)
+    return (position_after - position_before) / (2 * delta.to(u.s).value)
+
+
+def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    sun_galactic = sun_galactocentric_kpc(time)
+    radius_xy = np.hypot(sun_galactic[0], sun_galactic[1])
+    tangent = (
+        np.array(
+            [-sun_galactic[1], sun_galactic[0], 0.0],
+            dtype=float,
+        )
+        / radius_xy
+    )
+    speed_kpc_per_s = SOLAR_GALACTIC_ORBITAL_SPEED.to_value(u.kpc / u.s)
+    galactic_velocity_au_per_s = tangent * speed_kpc_per_s * KPC_TO_AU
+    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
+    return galactic_rotation.T @ galactic_velocity_au_per_s
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
