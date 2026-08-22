@@ -13,17 +13,18 @@ from astropy.coordinates import (
 from astropy.time import Time
 from scipy.spatial.transform import Rotation
 
-NETHERLANDS_LAT = 52.1326 * u.deg
-NETHERLANDS_LON = 5.2913 * u.deg
+# Netherlands
+OBSERVER_LAT = 52.1326 * u.deg
+OBSERVER_LON = 5.2913 * u.deg
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
     spin_axis = earth_spin_axis_ecliptic(time)
-    netherlands_dir = netherlands_direction_ecliptic(time)
-    netherlands_local = netherlands_direction_itrs(time)
+    observer_dir = observer_direction_ecliptic(time)
+    observer_local = observer_direction_itrs(time)
     rotation = Rotation.align_vectors(
-        [spin_axis, netherlands_dir],
-        [np.array([0.0, 0.0, 1.0]), netherlands_local],
+        [spin_axis, observer_dir],
+        [np.array([0.0, 0.0, 1.0]), observer_local],
     )[0]
     return rotation.as_matrix()
 
@@ -120,8 +121,8 @@ def earth_spin_axis_ecliptic(time: Time) -> np.ndarray:
     return _gcrs_unit_vector_to_ecliptic(earth_spin_axis_gcrs(time), time)
 
 
-def netherlands_direction_ecliptic(time: Time) -> np.ndarray:
-    return _gcrs_unit_vector_to_ecliptic(netherlands_direction_gcrs(time), time)
+def observer_direction_ecliptic(time: Time) -> np.ndarray:
+    return _gcrs_unit_vector_to_ecliptic(observer_direction_gcrs(time), time)
 
 
 def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
@@ -131,20 +132,20 @@ def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
     return direction / np.linalg.norm(direction)
 
 
-def netherlands_direction_gcrs(time: Time) -> np.ndarray:
+def observer_direction_gcrs(time: Time) -> np.ndarray:
     location = EarthLocation.from_geodetic(
-        lat=NETHERLANDS_LAT,
-        lon=NETHERLANDS_LON,
+        lat=OBSERVER_LAT,
+        lon=OBSERVER_LON,
     )
     gcrs = location.get_gcrs(time)
     direction = np.array(gcrs.cartesian.xyz.value, dtype=float)
     return direction / np.linalg.norm(direction)
 
 
-def netherlands_direction_itrs(time: Time) -> np.ndarray:
+def observer_direction_itrs(time: Time) -> np.ndarray:
     location = EarthLocation.from_geodetic(
-        lat=NETHERLANDS_LAT,
-        lon=NETHERLANDS_LON,
+        lat=OBSERVER_LAT,
+        lon=OBSERVER_LON,
     )
     itrs = location.get_itrs(time)
     direction = np.array(itrs.cartesian.xyz.value, dtype=float)
