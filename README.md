@@ -1,3 +1,16 @@
+# Cursor setup
+On raspberry + ubuntu, when the agent calls the terminal, the commands would hang indefenitely
+- Fixed by installing zsh: "sudo apt install zsh"
+- Alternatively: Cursor settings -> Agents -> Legacy Terminal Tool -> on
+  - needs window reload (and possibly new chat)
+  - drawbacks: less isolation, no sandbox and no newer cursor features
+  - can only be set for all of cursor
+
+# raspberry hardware
+## WiFi
+- raspberry pi 4b does not want to reliably connect to lego brick over BLE if wifi is turned on: connect to raspberry over ethernet. It does not seem needed to turn off the wifi.
+- update: I reconnected over wifi, and BLE connectivity seems fine; keep an eye on it
+
 # Pybricks remote hub
 
 The Move Hub runs a thin BLE server that forwards commands directly to motors,
