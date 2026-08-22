@@ -23,6 +23,8 @@ precommit-install = "pre-commit install"
 bluetooth-off = "sudo systemctl disable --now bluetooth"
 bluetooth-on = "sudo systemctl enable --now bluetooth"
 
+wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORITY connection"
+
 [dependencies]
 micropython = ">=1.28.0,<2"
 python = ">=3.13,<3.14"
