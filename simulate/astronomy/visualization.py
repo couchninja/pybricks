@@ -72,6 +72,14 @@ from simulate.astronomy.constants import (
     MILKY_WAY_FRAME,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
+    OBSERVER_MOTION_MODES,
+    OBSERVER_VELOCITY_ARROW_COLOR,
+    OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION,
+    OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII,
+    OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
+    OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
+    OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
+    OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII,
     ORBIT_UPDATE_INTERVAL,
     ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
@@ -90,6 +98,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
     observer_direction_ecliptic,
+    observer_velocity_ecliptic_au_per_s,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
@@ -136,6 +145,7 @@ def show_earth_sun(
         wall_start=None,
         current_time=time,
     )
+    scene.metadata["observer_motion_mode"] = OBSERVER_MOTION_MODES[0]
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
         viewer=EarthCenteredViewer,
@@ -184,6 +194,16 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ),
         geom_name="observer",
         node_name="observer",
+        parent_node_name=SOLAR_SYSTEM_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            _observer_velocity_arrow_mesh(),
+            OBSERVER_VELOCITY_ARROW_COLOR,
+        ),
+        geom_name="observer_velocity_arrow",
+        node_name="observer_velocity_arrow",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
@@ -239,6 +259,17 @@ def update_earth_sun_scene(
         "observer",
         SOLAR_SYSTEM_FRAME,
         matrix=_transform_matrix(np.eye(3), state["observer_position"]),
+    )
+    motion_mode = scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+    scene.graph.update(
+        "observer_velocity_arrow",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_observer_velocity_arrow_transform(
+            state["observer_position"],
+            time,
+            motion_mode,
+            camera_distance_au,
+        ),
     )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
     scene.geometry["galactic_axis"] = _segment_path(
@@ -328,6 +359,73 @@ def _earth_root_position(state: EarthSunState) -> np.ndarray:
     solar_system = _transform_matrix(state["galactic_rotation"], state["sun_galactic_position"])
     earth = _transform_matrix(state["earth_rotation"], state["earth_position"])
     return (solar_system @ earth)[:3, 3]
+
+
+def _observer_velocity_arrow_mesh() -> trimesh.Trimesh:
+    total_length = OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII
+    head_length = total_length * OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION
+    shaft_length = total_length - head_length
+    shaft_radius = OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII
+    head_radius = OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII
+    shaft = trimesh.creation.cylinder(radius=shaft_radius, height=shaft_length)
+    shaft.apply_translation([0.0, 0.0, shaft_length / 2])
+    head = trimesh.creation.cone(radius=head_radius, height=head_length)
+    head.apply_translation([0.0, 0.0, shaft_length + head_length / 2])
+    arrow = trimesh.util.concatenate([shaft, head])
+    if not isinstance(arrow, trimesh.Trimesh):
+        raise TypeError("observer velocity arrow must be a Trimesh")
+    arrow.apply_scale(EARTH_RADIUS_AU)
+    return arrow
+
+
+def _observer_velocity_arrow_length_au(camera_distance_au: float) -> float:
+    return max(
+        camera_distance_au * OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
+        OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * EARTH_RADIUS_AU,
+    )
+
+
+def _observer_velocity_arrow_transform(
+    observer_position: np.ndarray,
+    time: Time,
+    motion_mode: str,
+    camera_distance_au: float,
+) -> np.ndarray:
+    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
+    speed = float(np.linalg.norm(velocity))
+    mesh_length = OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
+    if speed == 0.0:
+        return _transform_matrix(np.eye(3), observer_position)
+
+    direction = velocity / speed
+    arrow_length = _observer_velocity_arrow_length_au(camera_distance_au)
+    scale = arrow_length / mesh_length
+    rotation = _rotation_align_z_to(direction)
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation * scale
+    matrix[:3, 3] = observer_position + direction * (arrow_length / 2)
+    return matrix
+
+
+def _rotation_align_z_to(direction: np.ndarray) -> np.ndarray:
+    z_axis = np.array([0.0, 0.0, 1.0])
+    if np.allclose(direction, z_axis):
+        return np.eye(3)
+    if np.allclose(direction, -z_axis):
+        return np.diag([1.0, -1.0, -1.0])
+    axis = np.cross(z_axis, direction)
+    axis /= np.linalg.norm(axis)
+    angle = float(np.arccos(np.clip(np.dot(z_axis, direction), -1.0, 1.0)))
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
+    cross = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    return np.eye(3) * cos_angle + cross * sin_angle + np.outer(axis, axis) * (1.0 - cos_angle)
 
 
 def _earth_axis_path(state: EarthSunState, camera_distance_au: float) -> trimesh.path.Path3D:

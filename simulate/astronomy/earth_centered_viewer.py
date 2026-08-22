@@ -19,6 +19,11 @@ from simulate.astronomy.constants import (
     LABEL_FONT_SIZE,
     LABEL_OFFSET_BODY_RADII,
     MAX_DEPTH_RATIO,
+    MOTION_MODE_BUTTON_HEIGHT,
+    MOTION_MODE_BUTTON_MARGIN,
+    MOTION_MODE_BUTTON_WIDTH,
+    OBSERVER_MOTION_LABELS,
+    OBSERVER_MOTION_MODES,
     OPENGL_Z_NEAR_MIN_AU,
     ROOT_FRAME,
     TRACKBALL_SCALE_AU,
@@ -40,6 +45,7 @@ except Exception:
 class _EarthCenteredViewerState(TypedDict):
     screen_labels: list[text.Label]
     fps_label: text.Label
+    motion_mode_label: text.Label
     fps_frames: int
     fps_interval_start: float
     fps_display: float
@@ -86,6 +92,13 @@ class EarthCenteredViewer(SceneViewer):
                 anchor_x="left",
                 anchor_y="top",
             ),
+            "motion_mode_label": text.Label(
+                OBSERVER_MOTION_LABELS[OBSERVER_MOTION_MODES[0]],
+                font_size=LABEL_FONT_SIZE,
+                color=(80, 220, 255, 255),
+                anchor_x="center",
+                anchor_y="center",
+            ),
             "fps_frames": 0,
             "fps_interval_start": perf_counter(),
             "fps_display": 0.0,
@@ -115,6 +128,13 @@ class EarthCenteredViewer(SceneViewer):
     def on_mouse_scroll(self, x: int, y: int, dx: float, dy: float) -> None:
         super().on_mouse_scroll(x, y, dx, dy)
         self._sync_camera_clip_planes()
+
+    @override
+    def on_mouse_press(self, x: int, y: int, buttons: int, modifiers: int) -> None:
+        if buttons == pyglet.window.mouse.LEFT and self._motion_mode_button_contains(x, y):
+            self._cycle_observer_motion_mode()
+            return
+        super().on_mouse_press(x, y, buttons, modifiers)
 
     @override
     def reset_view(self, flags: dict[str, Any] | None = None) -> None:
@@ -227,6 +247,7 @@ class EarthCenteredViewer(SceneViewer):
         fps_label.x = FPS_LABEL_MARGIN
         fps_label.y = height - FPS_LABEL_MARGIN
         fps_label.draw()
+        self._draw_motion_mode_button(width, height)
         gl.glDisable(gl.GL_BLEND)
 
         gl.glPopMatrix()
@@ -234,6 +255,79 @@ class EarthCenteredViewer(SceneViewer):
         gl.glPopMatrix()
         gl.glMatrixMode(gl.GL_MODELVIEW)
         gl.glEnable(gl.GL_DEPTH_TEST)
+
+    def _motion_mode_button_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
+        left = width - MOTION_MODE_BUTTON_MARGIN - MOTION_MODE_BUTTON_WIDTH
+        bottom = MOTION_MODE_BUTTON_MARGIN
+        return left, bottom, left + MOTION_MODE_BUTTON_WIDTH, bottom + MOTION_MODE_BUTTON_HEIGHT
+
+    def _window_to_viewport(self, x: int, y: int) -> tuple[float, float]:
+        window_width, window_height = self.get_size()
+        viewport_width, viewport_height = self.get_viewport_size()
+        if window_width <= 0 or window_height <= 0:
+            return float(x), float(y)
+        return (
+            x * viewport_width / window_width,
+            y * viewport_height / window_height,
+        )
+
+    def _motion_mode_button_contains(self, x: int, y: int) -> bool:
+        viewport_x, viewport_y = self._window_to_viewport(x, y)
+        width, height = self.get_viewport_size()
+        left, bottom, right, top = self._motion_mode_button_bounds(width, height)
+        return left <= viewport_x <= right and bottom <= viewport_y <= top
+
+    def _draw_motion_mode_button(self, width: int, height: int) -> None:
+        left, bottom, right, top = self._motion_mode_button_bounds(width, height)
+        pyglet.graphics.draw(
+            4,
+            gl.GL_QUADS,
+            (
+                "v2f",
+                (
+                    left,
+                    bottom,
+                    right,
+                    bottom,
+                    right,
+                    top,
+                    left,
+                    top,
+                ),
+            ),
+            ("c4B", (40, 44, 52, 220) * 4),
+        )
+        pyglet.graphics.draw(
+            4,
+            gl.GL_LINE_LOOP,
+            (
+                "v2f",
+                (
+                    left,
+                    bottom,
+                    right,
+                    bottom,
+                    right,
+                    top,
+                    left,
+                    top,
+                ),
+            ),
+            ("c4B", (80, 220, 255, 255) * 4),
+        )
+        motion_mode = self.scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+        label = self._state["motion_mode_label"]
+        label.text = OBSERVER_MOTION_LABELS[motion_mode]
+        label.x = (left + right) // 2
+        label.y = (bottom + top) // 2
+        label.draw()
+
+    def _cycle_observer_motion_mode(self) -> None:
+        current_mode = self.scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+        current_index = OBSERVER_MOTION_MODES.index(current_mode)
+        next_mode = OBSERVER_MOTION_MODES[(current_index + 1) % len(OBSERVER_MOTION_MODES)]
+        self.scene.metadata["observer_motion_mode"] = next_mode
+        self.scene._redraw()
 
 
 def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
