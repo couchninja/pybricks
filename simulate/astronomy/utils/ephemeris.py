@@ -6,6 +6,7 @@ from astropy.coordinates import (
     BarycentricMeanEcliptic,
     CartesianRepresentation,
     EarthLocation,
+    Galactic,
     Galactocentric,
     SkyCoord,
     get_body_barycentric,
@@ -14,6 +15,9 @@ from astropy.time import Time
 from scipy.spatial.transform import Rotation
 
 from simulate.astronomy.constants import (
+    CMB_DIPOLE_B,
+    CMB_DIPOLE_L,
+    CMB_DIPOLE_SPEED,
     EARTH_RADIUS_AU,
     KPC_TO_AU,
     OBSERVER_MOTION_MODES,
@@ -169,12 +173,14 @@ def observer_velocity_ecliptic_au_per_s(time: Time, mode: str) -> np.ndarray:
         raise ValueError(f"unknown observer motion mode: {mode}")
 
     velocity = np.zeros(3, dtype=float)
-    if mode in ("earth_rotation", "sun_orbit", "milky_way_orbit"):
+    if mode in ("earth_rotation", "sun_orbit", "milky_way_orbit", "cmb_dipole"):
         velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
-    if mode in ("sun_orbit", "milky_way_orbit"):
+    if mode in ("sun_orbit", "milky_way_orbit", "cmb_dipole"):
         velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
-    if mode == "milky_way_orbit":
+    if mode in ("milky_way_orbit", "cmb_dipole"):
         velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
+    if mode == "cmb_dipole":
+        velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
 
 
@@ -240,6 +246,25 @@ def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
     galactic_velocity_au_per_s = tangent * speed_kpc_per_s * KPC_TO_AU
     galactic_rotation = ecliptic_to_galactocentric_rotation(time)
     return galactic_rotation.T @ galactic_velocity_au_per_s
+
+
+def cmb_dipole_direction_galactocentric(time: Time) -> np.ndarray:
+    direction = SkyCoord(
+        l=CMB_DIPOLE_L,
+        b=CMB_DIPOLE_B,
+        distance=1 * u.kpc,
+        frame=Galactic,
+    )
+    galactocentric = direction.transform_to(Galactocentric())
+    unit = np.array(galactocentric.cartesian.xyz.value, dtype=float)
+    return unit / np.linalg.norm(unit)
+
+
+def _cmb_dipole_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    direction = cmb_dipole_direction_galactocentric(time)
+    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
+    ecliptic_direction = galactic_rotation.T @ direction
+    return ecliptic_direction * CMB_DIPOLE_SPEED.to_value(u.au / u.s)
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
