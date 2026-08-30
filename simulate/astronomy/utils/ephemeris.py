@@ -137,6 +137,37 @@ def observer_direction_ecliptic(time: Time) -> np.ndarray:
     return _gcrs_unit_vector_to_ecliptic(observer_direction_gcrs(time), time)
 
 
+def ecliptic_to_observer_surface(vector: np.ndarray, time: Time) -> np.ndarray:
+    """Express an ecliptic vector in the observer's local surface frame.
+
+    Components:
+      x — north (tangent to the surface toward the north celestial pole)
+      y — east (tangent to the surface, geographic east)
+      z — up (local zenith / outward radial from Earth's center)
+    """
+    up = observer_direction_ecliptic(time)
+    east = np.cross(earth_spin_axis_ecliptic(time), up)
+    east /= np.linalg.norm(east)
+    north = np.cross(up, east)
+    return np.array(
+        [np.dot(vector, north), np.dot(vector, east), np.dot(vector, up)],
+        dtype=float,
+    )
+
+
+def observer_surface_euler_angles(surface_vector: np.ndarray) -> np.ndarray:
+    """Euler angles (yaw, pitch, roll) in radians for a surface-frame direction.
+
+    yaw — heading from north toward east (0 = north, π/2 = east)
+    pitch — elevation above the horizon (0 = horizon, π/2 = zenith)
+    roll — always 0 (a direction does not determine roll)
+    """
+    north, east, up = surface_vector
+    yaw = float(np.atan2(east, north))
+    pitch = float(np.atan2(up, np.hypot(north, east)))
+    return np.array([yaw, pitch, 0.0], dtype=float)
+
+
 def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
     north_pole = ITRS(x=0 * u.m, y=0 * u.m, z=1 * u.m, obstime=time)
     gcrs = north_pole.transform_to(GCRS(obstime=time))
