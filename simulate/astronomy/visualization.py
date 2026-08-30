@@ -5,8 +5,8 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, netherlands, earth_orbit, year_boundaries, earth_axis
-        galactic_center, galactic_orbit, galactic_axis
+          sun, earth, observer, earth_orbit, year_boundaries, earth_axis
+        galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
 
@@ -56,6 +56,7 @@ from simulate.astronomy.constants import (
     AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
     AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     CAMERA_DISTANCE_EARTH_RADII,
+    CMB_DIPOLE_ARROW_COLOR,
     EARTH_CENTER_FRAME,
     EARTH_CENTER_ORIGIN,
     EARTH_ORBIT_COLOR,
@@ -70,8 +71,16 @@ from simulate.astronomy.constants import (
     KPC_TO_AU,
     LINE_WIDTH_PIXELS,
     MILKY_WAY_FRAME,
-    NETHERLANDS_COLOR,
-    NETHERLANDS_MARKER_EARTH_RADII,
+    OBSERVER_COLOR,
+    OBSERVER_MARKER_EARTH_RADII,
+    OBSERVER_MOTION_MODES,
+    OBSERVER_VELOCITY_ARROW_COLOR,
+    OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION,
+    OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII,
+    OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
+    OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
+    OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
+    OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII,
     ORBIT_UPDATE_INTERVAL,
     ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
@@ -82,6 +91,7 @@ from simulate.astronomy.constants import (
 from simulate.astronomy.earth_centered_viewer import EarthCenteredViewer
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
+    cmb_dipole_direction_galactocentric,
     current_time,
     earth_heliocentric_ecliptic_au,
     earth_orbit_ecliptic_au,
@@ -89,7 +99,8 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
-    netherlands_direction_ecliptic,
+    observer_direction_ecliptic,
+    observer_velocity_ecliptic_au_per_s,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
@@ -107,7 +118,7 @@ class EarthSunState(TypedDict):
     earth_position: np.ndarray
     earth_rotation: np.ndarray
     spin_axis: np.ndarray
-    netherlands_position: np.ndarray
+    observer_position: np.ndarray
     galactic_rotation: np.ndarray
     sun_galactic_position: np.ndarray
     galactic_axis_half_length_au: float
@@ -136,6 +147,7 @@ def show_earth_sun(
         wall_start=None,
         current_time=time,
     )
+    scene.metadata["observer_motion_mode"] = OBSERVER_MOTION_MODES[0]
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
         viewer=EarthCenteredViewer,
@@ -177,13 +189,23 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     scene.add_geometry(
         _color_mesh(
             trimesh.creation.icosphere(
-                radius=NETHERLANDS_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
+                radius=OBSERVER_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
                 subdivisions=2,
             ),
-            NETHERLANDS_COLOR,
+            OBSERVER_COLOR,
         ),
-        geom_name="netherlands",
-        node_name="netherlands",
+        geom_name="observer",
+        node_name="observer",
+        parent_node_name=SOLAR_SYSTEM_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            _velocity_arrow_mesh(),
+            OBSERVER_VELOCITY_ARROW_COLOR,
+        ),
+        geom_name="observer_velocity_arrow",
+        node_name="observer_velocity_arrow",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
@@ -194,6 +216,16 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ),
         geom_name="galactic_center",
         node_name="galactic_center",
+        parent_node_name=MILKY_WAY_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            _velocity_arrow_mesh(),
+            CMB_DIPOLE_ARROW_COLOR,
+        ),
+        geom_name="cmb_dipole_arrow",
+        node_name="cmb_dipole_arrow",
         parent_node_name=MILKY_WAY_FRAME,
     )
 
@@ -236,9 +268,29 @@ def update_earth_sun_scene(
         matrix=_transform_matrix(state["earth_rotation"], state["earth_position"]),
     )
     scene.graph.update(
-        "netherlands",
+        "observer",
         SOLAR_SYSTEM_FRAME,
-        matrix=_transform_matrix(np.eye(3), state["netherlands_position"]),
+        matrix=_transform_matrix(np.eye(3), state["observer_position"]),
+    )
+    motion_mode = scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+    scene.graph.update(
+        "observer_velocity_arrow",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_observer_velocity_arrow_transform(
+            state["observer_position"],
+            time,
+            motion_mode,
+            camera_distance_au,
+        ),
+    )
+    scene.graph.update(
+        "cmb_dipole_arrow",
+        MILKY_WAY_FRAME,
+        matrix=_cmb_dipole_arrow_transform(
+            time,
+            _camera_distance_to_point_au(scene, _galactic_center_position(state)),
+            state["galactic_center_radius_au"],
+        ),
     )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
     scene.geometry["galactic_axis"] = _segment_path(
@@ -287,6 +339,15 @@ def _camera_distance_au(scene: trimesh.Scene) -> float:
     return float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
 
 
+def _camera_distance_to_point_au(scene: trimesh.Scene, point: np.ndarray) -> float:
+    eye = scene.camera_transform[:3, 3]
+    return float(np.linalg.norm(eye - point))
+
+
+def _galactic_center_position(state: EarthSunState) -> np.ndarray:
+    return -_earth_root_position(state)
+
+
 def _galactic_orbit_points(time: Time) -> np.ndarray:
     galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
     return sun_galactic_orbit_kpc(time) * galactic_scale
@@ -295,7 +356,7 @@ def _galactic_orbit_points(time: Time) -> np.ndarray:
 def _earth_sun_state(time: Time) -> EarthSunState:
     earth_position = earth_heliocentric_ecliptic_au(time)
     spin_axis = earth_spin_axis_ecliptic(time)
-    netherlands_dir = netherlands_direction_ecliptic(time)
+    observer_dir = observer_direction_ecliptic(time)
 
     sun_galactic_kpc = sun_galactocentric_kpc(time)
     sun_galactic_distance_kpc = np.linalg.norm(sun_galactic_kpc)
@@ -307,7 +368,7 @@ def _earth_sun_state(time: Time) -> EarthSunState:
         "earth_position": earth_position,
         "earth_rotation": earth_orientation_matrix(time),
         "spin_axis": spin_axis,
-        "netherlands_position": earth_position + netherlands_dir * EARTH_RADIUS_AU,
+        "observer_position": earth_position + observer_dir * EARTH_RADIUS_AU,
         "galactic_rotation": ecliptic_to_galactocentric_rotation(time),
         "sun_galactic_position": sun_galactic_position,
         "galactic_axis_half_length_au": (sun_galactic_distance_au * GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION),
@@ -328,6 +389,95 @@ def _earth_root_position(state: EarthSunState) -> np.ndarray:
     solar_system = _transform_matrix(state["galactic_rotation"], state["sun_galactic_position"])
     earth = _transform_matrix(state["earth_rotation"], state["earth_position"])
     return (solar_system @ earth)[:3, 3]
+
+
+def _velocity_arrow_mesh() -> trimesh.Trimesh:
+    total_length = OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII
+    head_length = total_length * OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION
+    shaft_length = total_length - head_length
+    shaft_radius = OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII
+    head_radius = OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII
+    shaft = trimesh.creation.cylinder(radius=shaft_radius, height=shaft_length)
+    shaft.apply_translation([0.0, 0.0, shaft_length / 2])
+    head = trimesh.creation.cone(radius=head_radius, height=head_length)
+    head.apply_translation([0.0, 0.0, shaft_length + head_length / 2])
+    arrow = trimesh.util.concatenate([shaft, head])
+    if not isinstance(arrow, trimesh.Trimesh):
+        raise TypeError("velocity arrow must be a Trimesh")
+    arrow.apply_scale(EARTH_RADIUS_AU)
+    return arrow
+
+
+def _velocity_arrow_mesh_length_au() -> float:
+    return OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
+
+
+def _velocity_arrow_length_au(camera_distance_au: float) -> float:
+    return max(
+        camera_distance_au * OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
+        OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * EARTH_RADIUS_AU,
+    )
+
+
+def _direction_arrow_transform(
+    origin: np.ndarray,
+    direction: np.ndarray,
+    camera_distance_au: float,
+) -> np.ndarray:
+    mesh_length = _velocity_arrow_mesh_length_au()
+    arrow_length = _velocity_arrow_length_au(camera_distance_au)
+    scale = arrow_length / mesh_length
+    rotation = _rotation_align_z_to(direction)
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation * scale
+    matrix[:3, 3] = origin + direction * (arrow_length / 2)
+    return matrix
+
+
+def _observer_velocity_arrow_transform(
+    observer_position: np.ndarray,
+    time: Time,
+    motion_mode: str,
+    camera_distance_au: float,
+) -> np.ndarray:
+    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
+    speed = float(np.linalg.norm(velocity))
+    if speed == 0.0:
+        return _transform_matrix(np.eye(3), observer_position)
+
+    direction = velocity / speed
+    return _direction_arrow_transform(observer_position, direction, camera_distance_au)
+
+
+def _cmb_dipole_arrow_transform(
+    time: Time,
+    camera_distance_au: float,
+    origin_offset_au: float,
+) -> np.ndarray:
+    direction = cmb_dipole_direction_galactocentric(time)
+    origin = direction * origin_offset_au
+    return _direction_arrow_transform(origin, direction, camera_distance_au)
+
+
+def _rotation_align_z_to(direction: np.ndarray) -> np.ndarray:
+    z_axis = np.array([0.0, 0.0, 1.0])
+    if np.allclose(direction, z_axis):
+        return np.eye(3)
+    if np.allclose(direction, -z_axis):
+        return np.diag([1.0, -1.0, -1.0])
+    axis = np.cross(z_axis, direction)
+    axis /= np.linalg.norm(axis)
+    angle = float(np.arccos(np.clip(np.dot(z_axis, direction), -1.0, 1.0)))
+    cos_angle = np.cos(angle)
+    sin_angle = np.sin(angle)
+    cross = np.array(
+        [
+            [0.0, -axis[2], axis[1]],
+            [axis[2], 0.0, -axis[0]],
+            [-axis[1], axis[0], 0.0],
+        ]
+    )
+    return np.eye(3) * cos_angle + cross * sin_angle + np.outer(axis, axis) * (1.0 - cos_angle)
 
 
 def _earth_axis_path(state: EarthSunState, camera_distance_au: float) -> trimesh.path.Path3D:
@@ -390,6 +540,8 @@ def _color_mesh(mesh: trimesh.Trimesh, color: list[int]) -> trimesh.Trimesh:
 def _print_scene_graph(scene: trimesh.Scene) -> None:
     parents = scene.graph.transforms.parents
     root = scene.graph.base_frame
+    if not isinstance(root, str):
+        raise TypeError("scene graph base_frame must be a str")
 
     def print_node(node: str, indent: int) -> None:
         print("  " * indent + node)  # noqa: T201

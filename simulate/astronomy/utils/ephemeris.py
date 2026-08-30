@@ -6,6 +6,7 @@ from astropy.coordinates import (
     BarycentricMeanEcliptic,
     CartesianRepresentation,
     EarthLocation,
+    Galactic,
     Galactocentric,
     SkyCoord,
     get_body_barycentric,
@@ -13,17 +14,29 @@ from astropy.coordinates import (
 from astropy.time import Time
 from scipy.spatial.transform import Rotation
 
-NETHERLANDS_LAT = 52.1326 * u.deg
-NETHERLANDS_LON = 5.2913 * u.deg
+from simulate.astronomy.constants import (
+    CMB_DIPOLE_B,
+    CMB_DIPOLE_L,
+    CMB_DIPOLE_SPEED,
+    EARTH_RADIUS_AU,
+    KPC_TO_AU,
+    OBSERVER_MOTION_MODES,
+    SIDEREAL_DAY,
+    SOLAR_GALACTIC_ORBITAL_SPEED,
+)
+
+# Netherlands
+OBSERVER_LAT = 52.1326 * u.deg
+OBSERVER_LON = 5.2913 * u.deg
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
     spin_axis = earth_spin_axis_ecliptic(time)
-    netherlands_dir = netherlands_direction_ecliptic(time)
-    netherlands_local = netherlands_direction_itrs(time)
+    observer_dir = observer_direction_ecliptic(time)
+    observer_local = observer_direction_itrs(time)
     rotation = Rotation.align_vectors(
-        [spin_axis, netherlands_dir],
-        [np.array([0.0, 0.0, 1.0]), netherlands_local],
+        [spin_axis, observer_dir],
+        [np.array([0.0, 0.0, 1.0]), observer_local],
     )[0]
     return rotation.as_matrix()
 
@@ -120,8 +133,8 @@ def earth_spin_axis_ecliptic(time: Time) -> np.ndarray:
     return _gcrs_unit_vector_to_ecliptic(earth_spin_axis_gcrs(time), time)
 
 
-def netherlands_direction_ecliptic(time: Time) -> np.ndarray:
-    return _gcrs_unit_vector_to_ecliptic(netherlands_direction_gcrs(time), time)
+def observer_direction_ecliptic(time: Time) -> np.ndarray:
+    return _gcrs_unit_vector_to_ecliptic(observer_direction_gcrs(time), time)
 
 
 def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
@@ -131,20 +144,20 @@ def earth_spin_axis_gcrs(time: Time) -> np.ndarray:
     return direction / np.linalg.norm(direction)
 
 
-def netherlands_direction_gcrs(time: Time) -> np.ndarray:
+def observer_direction_gcrs(time: Time) -> np.ndarray:
     location = EarthLocation.from_geodetic(
-        lat=NETHERLANDS_LAT,
-        lon=NETHERLANDS_LON,
+        lat=OBSERVER_LAT,
+        lon=OBSERVER_LON,
     )
     gcrs = location.get_gcrs(time)
     direction = np.array(gcrs.cartesian.xyz.value, dtype=float)
     return direction / np.linalg.norm(direction)
 
 
-def netherlands_direction_itrs(time: Time) -> np.ndarray:
+def observer_direction_itrs(time: Time) -> np.ndarray:
     location = EarthLocation.from_geodetic(
-        lat=NETHERLANDS_LAT,
-        lon=NETHERLANDS_LON,
+        lat=OBSERVER_LAT,
+        lon=OBSERVER_LON,
     )
     itrs = location.get_itrs(time)
     direction = np.array(itrs.cartesian.xyz.value, dtype=float)
@@ -153,6 +166,22 @@ def netherlands_direction_itrs(time: Time) -> np.ndarray:
 
 def current_time() -> Time:
     return Time.now()
+
+
+def observer_velocity_ecliptic_au_per_s(time: Time, mode: str) -> np.ndarray:
+    if mode not in OBSERVER_MOTION_MODES:
+        raise ValueError(f"unknown observer motion mode: {mode}")
+
+    velocity = np.zeros(3, dtype=float)
+    if mode in ("earth_rotation", "sun_orbit", "milky_way_orbit", "cmb_dipole"):
+        velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
+    if mode in ("sun_orbit", "milky_way_orbit", "cmb_dipole"):
+        velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
+    if mode in ("milky_way_orbit", "cmb_dipole"):
+        velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
+    if mode == "cmb_dipole":
+        velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
+    return velocity
 
 
 def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepresentation) -> np.ndarray:
@@ -185,6 +214,57 @@ def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.nda
     direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
     direction -= sun_galactic
     return direction / np.linalg.norm(direction)
+
+
+def _earth_rotation_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    spin_axis = earth_spin_axis_ecliptic(time)
+    observer_dir = observer_direction_ecliptic(time)
+    angular_speed = (2 * np.pi / SIDEREAL_DAY).to_value(1 / u.s)
+    omega = angular_speed * spin_axis
+    radius = EARTH_RADIUS_AU * observer_dir
+    return np.cross(omega, radius)
+
+
+def _earth_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    delta = 1 * u.hour
+    position_before = earth_heliocentric_ecliptic_au(time - delta)
+    position_after = earth_heliocentric_ecliptic_au(time + delta)
+    return (position_after - position_before) / (2 * delta.to(u.s).value)
+
+
+def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    sun_galactic = sun_galactocentric_kpc(time)
+    radius_xy = np.hypot(sun_galactic[0], sun_galactic[1])
+    tangent = (
+        np.array(
+            [-sun_galactic[1], sun_galactic[0], 0.0],
+            dtype=float,
+        )
+        / radius_xy
+    )
+    speed_kpc_per_s = SOLAR_GALACTIC_ORBITAL_SPEED.to_value(u.kpc / u.s)
+    galactic_velocity_au_per_s = tangent * speed_kpc_per_s * KPC_TO_AU
+    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
+    return galactic_rotation.T @ galactic_velocity_au_per_s
+
+
+def cmb_dipole_direction_galactocentric(time: Time) -> np.ndarray:
+    direction = SkyCoord(
+        l=CMB_DIPOLE_L,
+        b=CMB_DIPOLE_B,
+        distance=1 * u.kpc,
+        frame=Galactic,
+    )
+    galactocentric = direction.transform_to(Galactocentric())
+    unit = np.array(galactocentric.cartesian.xyz.value, dtype=float)
+    return unit / np.linalg.norm(unit)
+
+
+def _cmb_dipole_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    direction = cmb_dipole_direction_galactocentric(time)
+    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
+    ecliptic_direction = galactic_rotation.T @ direction
+    return ecliptic_direction * CMB_DIPOLE_SPEED.to_value(u.au / u.s)
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
