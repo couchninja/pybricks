@@ -55,18 +55,25 @@ OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION = 0.35
 SOLAR_GALACTIC_ORBITAL_SPEED = 220 * u.km / u.s
 SIDEREAL_DAY = 86164.0905 * u.s
 
-OBSERVER_MOTION_MODES = ("earth_rotation", "sun_orbit", "milky_way_orbit")
+# Solar-system velocity relative to the CMB rest frame (Planck 2018 dipole).
+CMB_DIPOLE_SPEED = 369.82 * u.km / u.s
+CMB_DIPOLE_L = 264.021 * u.deg
+CMB_DIPOLE_B = 48.253 * u.deg
+
+OBSERVER_MOTION_MODES = ("earth_rotation", "sun_orbit", "milky_way_orbit", "cmb_dipole")
 OBSERVER_MOTION_LABELS = {
     "earth_rotation": "Earth rotation",
     "sun_orbit": "Sun orbit",
     "milky_way_orbit": "Milky Way orbit",
+    "cmb_dipole": "CMB dipole",
 }
 MOTION_MODE_BUTTON_MARGIN = 8
-MOTION_MODE_BUTTON_WIDTH = 180
+MOTION_MODE_BUTTON_WIDTH = 200
 MOTION_MODE_BUTTON_HEIGHT = 32
 GALACTIC_ORBIT_COLOR = [120, 80, 180, 255]
 GALACTIC_AXIS_COLOR = [180, 120, 255, 255]
 GALACTIC_CENTER_COLOR = [240, 200, 255, 255]
+CMB_DIPOLE_ARROW_COLOR = [255, 200, 80, 255]
 LABEL_OFFSET_BODY_RADII = 2.5
 LABEL_FONT_SIZE = 18
 FPS_LABEL_MARGIN = 8

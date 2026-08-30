@@ -6,7 +6,7 @@ Scene graph:
       milky_way
         solar_system
           sun, earth, observer, earth_orbit, year_boundaries, earth_axis
-        galactic_center, galactic_orbit, galactic_axis
+        galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
 
@@ -56,6 +56,7 @@ from simulate.astronomy.constants import (
     AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
     AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     CAMERA_DISTANCE_EARTH_RADII,
+    CMB_DIPOLE_ARROW_COLOR,
     EARTH_CENTER_FRAME,
     EARTH_CENTER_ORIGIN,
     EARTH_ORBIT_COLOR,
@@ -90,6 +91,7 @@ from simulate.astronomy.constants import (
 from simulate.astronomy.earth_centered_viewer import EarthCenteredViewer
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
+    cmb_dipole_direction_galactocentric,
     current_time,
     earth_heliocentric_ecliptic_au,
     earth_orbit_ecliptic_au,
@@ -199,7 +201,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
 
     scene.add_geometry(
         _color_mesh(
-            _observer_velocity_arrow_mesh(),
+            _velocity_arrow_mesh(),
             OBSERVER_VELOCITY_ARROW_COLOR,
         ),
         geom_name="observer_velocity_arrow",
@@ -214,6 +216,16 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ),
         geom_name="galactic_center",
         node_name="galactic_center",
+        parent_node_name=MILKY_WAY_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            _velocity_arrow_mesh(),
+            CMB_DIPOLE_ARROW_COLOR,
+        ),
+        geom_name="cmb_dipole_arrow",
+        node_name="cmb_dipole_arrow",
         parent_node_name=MILKY_WAY_FRAME,
     )
 
@@ -271,6 +283,15 @@ def update_earth_sun_scene(
             camera_distance_au,
         ),
     )
+    scene.graph.update(
+        "cmb_dipole_arrow",
+        MILKY_WAY_FRAME,
+        matrix=_cmb_dipole_arrow_transform(
+            time,
+            _camera_distance_to_point_au(scene, _galactic_center_position(state)),
+            state["galactic_center_radius_au"],
+        ),
+    )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
     scene.geometry["galactic_axis"] = _segment_path(
         np.array([0.0, 0.0, -state["galactic_axis_half_length_au"]]),
@@ -318,6 +339,15 @@ def _camera_distance_au(scene: trimesh.Scene) -> float:
     return float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
 
 
+def _camera_distance_to_point_au(scene: trimesh.Scene, point: np.ndarray) -> float:
+    eye = scene.camera_transform[:3, 3]
+    return float(np.linalg.norm(eye - point))
+
+
+def _galactic_center_position(state: EarthSunState) -> np.ndarray:
+    return -_earth_root_position(state)
+
+
 def _galactic_orbit_points(time: Time) -> np.ndarray:
     galactic_scale = KPC_TO_AU * GALACTIC_ORBIT_DISTANCE_SCALE
     return sun_galactic_orbit_kpc(time) * galactic_scale
@@ -361,7 +391,7 @@ def _earth_root_position(state: EarthSunState) -> np.ndarray:
     return (solar_system @ earth)[:3, 3]
 
 
-def _observer_velocity_arrow_mesh() -> trimesh.Trimesh:
+def _velocity_arrow_mesh() -> trimesh.Trimesh:
     total_length = OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII
     head_length = total_length * OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION
     shaft_length = total_length - head_length
@@ -373,16 +403,35 @@ def _observer_velocity_arrow_mesh() -> trimesh.Trimesh:
     head.apply_translation([0.0, 0.0, shaft_length + head_length / 2])
     arrow = trimesh.util.concatenate([shaft, head])
     if not isinstance(arrow, trimesh.Trimesh):
-        raise TypeError("observer velocity arrow must be a Trimesh")
+        raise TypeError("velocity arrow must be a Trimesh")
     arrow.apply_scale(EARTH_RADIUS_AU)
     return arrow
 
 
-def _observer_velocity_arrow_length_au(camera_distance_au: float) -> float:
+def _velocity_arrow_mesh_length_au() -> float:
+    return OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
+
+
+def _velocity_arrow_length_au(camera_distance_au: float) -> float:
     return max(
         camera_distance_au * OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
         OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * EARTH_RADIUS_AU,
     )
+
+
+def _direction_arrow_transform(
+    origin: np.ndarray,
+    direction: np.ndarray,
+    camera_distance_au: float,
+) -> np.ndarray:
+    mesh_length = _velocity_arrow_mesh_length_au()
+    arrow_length = _velocity_arrow_length_au(camera_distance_au)
+    scale = arrow_length / mesh_length
+    rotation = _rotation_align_z_to(direction)
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation * scale
+    matrix[:3, 3] = origin + direction * (arrow_length / 2)
+    return matrix
 
 
 def _observer_velocity_arrow_transform(
@@ -393,18 +442,21 @@ def _observer_velocity_arrow_transform(
 ) -> np.ndarray:
     velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
     speed = float(np.linalg.norm(velocity))
-    mesh_length = OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
     if speed == 0.0:
         return _transform_matrix(np.eye(3), observer_position)
 
     direction = velocity / speed
-    arrow_length = _observer_velocity_arrow_length_au(camera_distance_au)
-    scale = arrow_length / mesh_length
-    rotation = _rotation_align_z_to(direction)
-    matrix = np.eye(4)
-    matrix[:3, :3] = rotation * scale
-    matrix[:3, 3] = observer_position + direction * (arrow_length / 2)
-    return matrix
+    return _direction_arrow_transform(observer_position, direction, camera_distance_au)
+
+
+def _cmb_dipole_arrow_transform(
+    time: Time,
+    camera_distance_au: float,
+    origin_offset_au: float,
+) -> np.ndarray:
+    direction = cmb_dipole_direction_galactocentric(time)
+    origin = direction * origin_offset_au
+    return _direction_arrow_transform(origin, direction, camera_distance_au)
 
 
 def _rotation_align_z_to(direction: np.ndarray) -> np.ndarray:
@@ -502,7 +554,7 @@ def _print_scene_graph(scene: trimesh.Scene) -> None:
 
 
 if __name__ == "__main__":
-    show_earth_sun()
-    # show_earth_sun(time_scaling=86_400)  # 1 day per second
+    # show_earth_sun()
+    show_earth_sun(time_scaling=86_400)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
