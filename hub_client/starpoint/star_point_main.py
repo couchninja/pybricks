@@ -42,7 +42,7 @@ async def star_point_main(upload_program: bool = False):
             print(f"Tilt motor angle: {tilt_angle * tilt_gear_ratio} degrees.")
             await asyncio.sleep(3)
 
-            await motorPan.run_target(1200, target_angle=-180 / pan_gear_ratio)
+            await motorPan.run_target(1200, target_angle=-340 / pan_gear_ratio)
             pan_angle = await motorPan.angle()
             print(f"Pan motor angle: {pan_angle * pan_gear_ratio} degrees.")
 
