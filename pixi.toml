@@ -24,6 +24,7 @@ bluetooth-off = "sudo systemctl disable --now bluetooth"
 bluetooth-on = "sudo systemctl enable --now bluetooth"
 
 wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORITY connection"
+gpio-buttons = "sudo .pixi/envs/default/bin/python scripts/gpio_buttons.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
@@ -41,6 +42,7 @@ pre-commit = ">=4.0"
 ruff = "==0.14.14"
 ty = "==0.0.14"
 watchfiles = ">=1.0"
+gpiod = ">=2.5.0, <3"
 
 
 # pybricks-ble depends on an old pybricks-api git commit (3.6.1). Without this
