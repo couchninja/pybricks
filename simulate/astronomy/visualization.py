@@ -99,11 +99,15 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
+    ecliptic_to_observer_surface,
     observer_direction_ecliptic,
+    observer_surface_euler_angles,
     observer_velocity_ecliptic_au_per_s,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
+
+last_orientation_print = -1
 
 
 class EarthSunAnimationState(TypedDict):
@@ -323,7 +327,8 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
     animation = scene.metadata["earth_sun_animation"]
     if animation["wall_start"] is None:
         animation["wall_start"] = perf_counter()
-    elapsed = perf_counter() - animation["wall_start"]
+    now = perf_counter()
+    elapsed = now - animation["wall_start"]
     time = animation["start_time"] + elapsed * animation["time_scaling"] * u.second
     animation["current_time"] = time
     animation["last_orbit_time"] = update_earth_sun_scene(
@@ -331,6 +336,27 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
         time,
         animation["last_orbit_time"],
         _camera_distance_au(scene),
+    )
+    global last_orientation_print
+    if now - last_orientation_print >= 10.0:
+        last_orientation_print = now
+        _print_active_orientation_vector(scene, time)
+
+
+def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
+    motion_mode = scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
+    speed = float(np.linalg.norm(velocity))
+    if speed == 0.0:
+        print(f"{motion_mode}: surface [0, 0, 0]  euler [0, 0, 0] deg")  # noqa: T201
+        return
+    direction = velocity / speed
+    surface = ecliptic_to_observer_surface(direction, time)
+    yaw, pitch, roll = np.degrees(observer_surface_euler_angles(surface))
+    print(  # noqa: T201
+        f"{motion_mode}: "
+        f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
+        f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg"
     )
 
 
@@ -554,7 +580,7 @@ def _print_scene_graph(scene: trimesh.Scene) -> None:
 
 
 if __name__ == "__main__":
-    # show_earth_sun()
-    show_earth_sun(time_scaling=86_400)  # 1 day per second
+    show_earth_sun()
+    # show_earth_sun(time_scaling=86_400)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second

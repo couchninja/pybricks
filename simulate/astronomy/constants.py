@@ -82,6 +82,9 @@ LINE_WIDTH_PIXELS = 1
 MILKY_WAY_FRAME = "milky_way"
 SOLAR_SYSTEM_FRAME = "solar_system"
 EARTH_CENTER_FRAME = "earth_center"
+# Trimesh scene base/world frame: fixed display origin for the camera and trackball.
+# No astronomy coordinates live here; earth_center is its only child and recenters
+# the subtree so Earth stays at EARTH_CENTER_ORIGIN.
 ROOT_FRAME = "root_frame"
 EARTH_CENTER_ORIGIN = np.zeros(3)
 
