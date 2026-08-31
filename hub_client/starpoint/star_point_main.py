@@ -3,7 +3,7 @@ import asyncio
 from pybricks.parameters import Port
 
 from hub_client import MoveHub, Motor
-from hub_client.starpoint.buttons import ButtonData, StarpointButtons
+from hub_client.starpoint.button_menu import ButtonData, ButtonMenu
 from simulate.astronomy.constants import ObserverFrame
 from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_frame
 
@@ -67,13 +67,17 @@ async def star_point_main(upload_program: bool = False) -> None:
 
         await calibrate_motors(hub)
 
-        buttons = StarpointButtons()
+        sensor = hub.color_distance_sensor(Port.D)
+        buttons = ButtonMenu()
         activity = asyncio.Event()
         point_lock = asyncio.Lock()
 
         async def point_selected() -> None:
             async with point_lock:
-                await point_at_frame(hub, buttons.selected_button["frame"])
+                button = buttons.selected_button
+                print(f"Button: {button}")
+                await sensor.light.on(button["color"])
+                await point_at_frame(hub, button["frame"])
 
         async def on_frame_selected(button: ButtonData) -> None:
             print(f"Frame: {button['frame'].label}")

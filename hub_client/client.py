@@ -180,10 +180,25 @@ class Motor:
         return result
 
 
+class SensorLight:
+    def __init__(self, session: _CommandSession, port: Port):
+        self._session = session
+        self.port = port
+
+    async def on(self, color: Color) -> None:
+        await self._session.call(
+            f"sensor.light.on {self.port.name} {_color_name(color)}"
+        )
+
+    async def off(self) -> None:
+        await self._session.call(f"sensor.light.off {self.port.name}")
+
+
 class ColorDistanceSensor:
     def __init__(self, session: _CommandSession, port: Port):
         self._session = session
         self.port = port
+        self.light = SensorLight(session, port)
 
     async def distance(self) -> int:
         result = await self._session.call(f"sensor.distance {self.port.name}")
