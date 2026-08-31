@@ -14,6 +14,7 @@ scan = "python scripts/ble_control.py scan"
 stop = "python scripts/ble_control.py stop"
 upload = "python scripts/ble_control.py download pybricks/main.py"
 test = "python scripts/test_hub.py"
+motionrange = "python hub_client/starpoint/motion_range_main.py"
 starpoint = "python hub_client/starpoint/star_point_main.py"
 visualize = "python simulate/astronomy/visualization.py"
 visualize-watch = "python -m watchfiles --filter python \"python simulate/astronomy/visualization.py\" simulate/astronomy/"
@@ -22,6 +23,9 @@ precommit-install = "pre-commit install"
 # Survives reboot
 bluetooth-off = "sudo systemctl disable --now bluetooth"
 bluetooth-on = "sudo systemctl enable --now bluetooth"
+# Does not survice reboot
+wifi-off = "sudo nmcli radio wifi off"
+wifi-on = "sudo nmcli radio wifi on"
 
 wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORITY connection"
 gpio-buttons = "sudo .pixi/envs/default/bin/python scripts/gpio_buttons.py"

@@ -10,6 +10,10 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
 ## WiFi
 - raspberry pi 4b does not want to reliably connect to lego brick over BLE if wifi is turned on: connect to raspberry over ethernet. It does not seem needed to turn off the wifi.
 - update: I reconnected over wifi, and BLE connectivity seems fine; keep an eye on it
+- update: I had the problem again, and a reboot did not fix it
+  - instead I connected over ethernet
+  - and then had to do: "pixi run wifi-off && pixi run wifi-on"
+    - perhaps I can run that still connected to wifi
 
 # Pybricks remote hub
 

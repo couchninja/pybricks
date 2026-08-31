@@ -1,5 +1,6 @@
 import numpy as np
 from astropy import units as u
+from astropy.utils.iers import conf as iers_conf
 from astropy.coordinates import (
     GCRS,
     ITRS,
@@ -24,6 +25,9 @@ from simulate.astronomy.constants import (
     SOLAR_GALACTIC_ORBITAL_SPEED,
     ObserverMotionMode,
 )
+
+iers_conf.auto_download = False
+iers_conf.auto_max_age = None
 
 # Netherlands
 OBSERVER_LAT = 52.1326 * u.deg
