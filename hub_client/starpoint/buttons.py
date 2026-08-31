@@ -9,7 +9,7 @@ import gpiod
 from gpiod.line import Bias, Direction, Edge, Value
 from pybricks.parameters import Color
 
-from simulate.astronomy.constants import ObserverMotionMode
+from simulate.astronomy.constants import ObserverFrame
 
 CHIP = "/dev/gpiochip0"
 DEBOUNCE_S = 0.03
@@ -18,7 +18,7 @@ DEBOUNCE_S = 0.03
 class ButtonData(TypedDict):
     button_pin: int
     led_pin: int
-    mode: ObserverMotionMode
+    frame: ObserverFrame
     color: Color
 
 
@@ -29,31 +29,31 @@ BUTTONS: tuple[ButtonData, ...] = (
     {
         "button_pin": 27,
         "led_pin": 17,
-        "mode": ObserverMotionMode.EARTH_ROTATION,
+        "frame": ObserverFrame.EARTH_ROTATION,
         "color": Color.BLUE,
     },
     {
         "button_pin": 22,
         "led_pin": 23,
-        "mode": ObserverMotionMode.SUN_ORBIT,
+        "frame": ObserverFrame.SUN_ORBIT,
         "color": Color.ORANGE,
     },
     {
         "button_pin": 24,
         "led_pin": 25,
-        "mode": ObserverMotionMode.MILKY_WAY_ORBIT,
+        "frame": ObserverFrame.MILKY_WAY_ORBIT,
         "color": Color.GREEN,
     },
     {
         "button_pin": 5,
         "led_pin": 6,
-        "mode": ObserverMotionMode.CMB_DIPOLE,
+        "frame": ObserverFrame.CMB_DIPOLE,
         "color": Color.YELLOW,
     },
     {
         "button_pin": 12,
         "led_pin": 16,
-        "mode": ObserverMotionMode.CMB_DIPOLE,
+        "frame": ObserverFrame.CMB_DIPOLE,
         "color": Color.WHITE,
     },
 )
