@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pybricks.parameters import Color, Direction, Port, Stop
 from pybricksdev.connections.pybricks import PybricksHubBLE
 
-from hub_client.ble import RECOVERABLE_ERRORS, connect, disconnect_hub
+from pybricks_client.ble import RECOVERABLE_ERRORS, connect, disconnect_hub
 
 
 class HubClientError(RuntimeError):
@@ -249,7 +249,7 @@ class MoveHub:
         cls,
         name: str | None = None,
         *,
-        program: str | None = "pybricks/main.py",
+        program: str | None = "pybricks_hub/main.py",
         retries: int = 5,
     ) -> AsyncIterator[MoveHub]:
         """Deploy over GATT; commands via stdin write, replies via stdout."""

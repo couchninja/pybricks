@@ -2,13 +2,13 @@ import asyncio
 
 from pybricks.parameters import Port
 
-from hub_client import MoveHub
+from pybricks_client import MoveHub
 
 
 async def motion_range(upload_program: bool = False) -> None:
     print("Star point main")
 
-    async with MoveHub.connect(program="pybricks/main.py" if upload_program else None) as hub:
+    async with MoveHub.connect(program="pybricks_hub/main.py" if upload_program else None) as hub:
         await hub.ping()
         print("Hub responded to ping.")
 

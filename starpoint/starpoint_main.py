@@ -2,8 +2,8 @@ import asyncio
 
 from pybricks.parameters import Port
 
-from hub_client import MoveHub, Motor
-from hub_client.starpoint.button_menu import ButtonData, ButtonMenu
+from pybricks_client import MoveHub, Motor
+from gpio.button_menu import ButtonData, ButtonMenu
 from simulate.astronomy.constants import ObserverFrame
 from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_frame
 
@@ -61,7 +61,7 @@ async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
 async def star_point_main(upload_program: bool = False) -> None:
     print("Star point main")
 
-    async with MoveHub.connect(program="pybricks/main.py" if upload_program else None) as hub:
+    async with MoveHub.connect(program="pybricks_hub/main.py" if upload_program else None) as hub:
         await hub.ping()
         print("Hub responded to ping.")
 
