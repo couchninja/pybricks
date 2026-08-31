@@ -155,6 +155,12 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
                 reply(seq, "val " + str(sensor.reflection()))
             elif action == "ambient":
                 reply(seq, "val " + str(sensor.ambient()))
+            elif action == "light.on":
+                sensor.light.on(COLORS[arg2])
+                reply(seq, "ok")
+            elif action == "light.off":
+                sensor.light.off()
+                reply(seq, "ok")
             else:
                 reply(seq, "err unknown sensor command")
             return

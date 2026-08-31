@@ -36,7 +36,7 @@ BUTTONS: tuple[ButtonData, ...] = (
         "button_pin": 22,
         "led_pin": 23,
         "frame": ObserverFrame.SUN_ORBIT,
-        "color": Color.ORANGE,
+        "color": Color.RED,
     },
     {
         "button_pin": 24,
@@ -48,7 +48,7 @@ BUTTONS: tuple[ButtonData, ...] = (
         "button_pin": 5,
         "led_pin": 6,
         "frame": ObserverFrame.CMB_DIPOLE,
-        "color": Color.YELLOW,
+        "color": Color.RED,
     },
     {
         "button_pin": 12,
@@ -59,7 +59,7 @@ BUTTONS: tuple[ButtonData, ...] = (
 )
 
 
-class StarpointButtons:
+class ButtonMenu:
     def __init__(
         self,
         buttons: tuple[ButtonData, ...] = BUTTONS,
