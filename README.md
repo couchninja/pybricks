@@ -14,6 +14,9 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
   - instead I connected over ethernet
   - and then had to do: "pixi run wifi-off && pixi run wifi-on"
     - perhaps I can run that still connected to wifi
+- The raspberry can hang if it is pushed too hard:
+  - Cursor plugins: only install python
+  - Don't run too many agents simultaneously
 
 # Pybricks remote hub
 
