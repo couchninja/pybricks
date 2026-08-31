@@ -15,7 +15,7 @@ from pybricks.tools import read_input_byte, wait
 
 MOTOR_PORTS = {
     "A": (Port.A, Direction.CLOCKWISE),
-    "B": (Port.B, Direction.COUNTERCLOCKWISE),
+    "B": (Port.B, Direction.CLOCKWISE),
     "C": (Port.C, Direction.COUNTERCLOCKWISE),
 }
 
@@ -51,7 +51,7 @@ def color_name(color):
     return name
 
 
-def reply(seq, line):
+def reply(seq, line) -> None:
     print(str(seq) + " " + line)
 
 
@@ -61,7 +61,7 @@ def parse_stop(value):
     return None
 
 
-def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4=""):
+def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
     # Move Hub MicroPython can raise TypeError when list slices are passed as
     # function arguments after motors/sensors are initialized.
     seq = str(seq)
