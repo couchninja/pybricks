@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 from typing import TypedDict
 
 import gpiod
@@ -13,6 +14,7 @@ from simulate.astronomy.constants import ObserverFrame
 
 CHIP = "/dev/gpiochip0"
 DEBOUNCE_S = 0.03
+BLINK_PERIOD_S = 0.4
 
 
 class ButtonData(TypedDict):
@@ -75,6 +77,20 @@ class ButtonMenu:
         }
         self._selected_index = 0
         self._selection_listeners: list[ButtonListener] = []
+        self._request: gpiod.LineRequest | None = None
+
+    def __enter__(self) -> ButtonMenu:
+        self._request = gpiod.request_lines(
+            self._chip,
+            consumer="starpoint-buttons",
+            config=self._line_config(),
+        )
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        if self._request is not None:
+            self._request.release()
+            self._request = None
 
     @property
     def buttons(self) -> tuple[ButtonData, ...]:
@@ -91,31 +107,45 @@ class ButtonMenu:
     def on_selection_changed(self, listener: ButtonListener) -> None:
         self._selection_listeners.append(listener)
 
+    @asynccontextmanager
+    async def blinking(
+        self, index: int, *, period_s: float = BLINK_PERIOD_S
+    ) -> AsyncIterator[None]:
+        led_pin = self._buttons[index]["led_pin"]
+        task = asyncio.create_task(self._blink_led(led_pin, period_s))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._set_led(led_pin, False)
+
     async def run(self) -> None:
-        with gpiod.request_lines(
-            self._chip,
-            consumer="starpoint-buttons",
-            config=self._line_config(),
-        ) as request:
-            self._show_selection(request, self._selected_index)
-            last_event_s = {
-                button["button_pin"]: 0.0 for button in self._buttons
-            }
+        self._show_selection(self._selected_index)
+        last_event_s = {button["button_pin"]: 0.0 for button in self._buttons}
 
-            while True:
-                events = await asyncio.to_thread(
-                    lambda: list(request.read_edge_events())
-                )
-                if not events:
-                    await asyncio.sleep(0.01)
-                    continue
+        while True:
+            request = self._require_request()
+            events = await asyncio.to_thread(
+                lambda: list(request.read_edge_events())
+            )
+            if not events:
+                await asyncio.sleep(0.01)
+                continue
 
-                for event in events:
-                    await self._handle_event(request, event, last_event_s)
+            for event in events:
+                await self._handle_event(event, last_event_s)
+
+    async def _blink_led(self, led_pin: int, period_s: float) -> None:
+        on = False
+        while True:
+            on = not on
+            self._set_led(led_pin, on)
+            await asyncio.sleep(period_s)
 
     async def _handle_event(
         self,
-        request: gpiod.LineRequest,
         event: gpiod.EdgeEvent,
         last_event_s: dict[int, float],
     ) -> None:
@@ -133,20 +163,24 @@ class ButtonMenu:
             return
 
         self._selected_index = index
-        self._show_selection(request, index)
-        await self._notify_selection_changed(index)
-
-    async def _notify_selection_changed(self, index: int) -> None:
+        self._show_selection(index)
         button = self._buttons[index]
         for listener in self._selection_listeners:
             await listener(button)
 
-    def _show_selection(self, request: gpiod.LineRequest, selected_index: int) -> None:
+    def _show_selection(self, selected_index: int) -> None:
         for index, button in enumerate(self._buttons):
-            request.set_value(
-                button["led_pin"],
-                Value.ACTIVE if index == selected_index else Value.INACTIVE,
-            )
+            self._set_led(button["led_pin"], index == selected_index)
+
+    def _set_led(self, led_pin: int, on: bool) -> None:
+        self._require_request().set_value(
+            led_pin, Value.ACTIVE if on else Value.INACTIVE
+        )
+
+    def _require_request(self) -> gpiod.LineRequest:
+        if self._request is None:
+            raise RuntimeError("ButtonMenu must be used as a context manager")
+        return self._request
 
     def _line_config(self) -> dict[int, gpiod.LineSettings]:
         config: dict[int, gpiod.LineSettings] = {}
