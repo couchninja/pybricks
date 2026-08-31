@@ -19,13 +19,13 @@ from simulate.astronomy.constants import (
     LABEL_FONT_SIZE,
     LABEL_OFFSET_BODY_RADII,
     MAX_DEPTH_RATIO,
-    MOTION_MODE_BUTTON_HEIGHT,
-    MOTION_MODE_BUTTON_MARGIN,
-    MOTION_MODE_BUTTON_WIDTH,
+    OBSERVER_FRAME_BUTTON_HEIGHT,
+    OBSERVER_FRAME_BUTTON_MARGIN,
+    OBSERVER_FRAME_BUTTON_WIDTH,
     OPENGL_Z_NEAR_MIN_AU,
     ROOT_FRAME,
     TRACKBALL_SCALE_AU,
-    ObserverMotionMode,
+    ObserverFrame,
 )
 
 try:
@@ -44,7 +44,7 @@ except Exception:
 class _EarthCenteredViewerState(TypedDict):
     screen_labels: list[text.Label]
     fps_label: text.Label
-    motion_mode_label: text.Label
+    observer_frame_label: text.Label
     fps_frames: int
     fps_interval_start: float
     fps_display: float
@@ -91,8 +91,8 @@ class EarthCenteredViewer(SceneViewer):
                 anchor_x="left",
                 anchor_y="top",
             ),
-            "motion_mode_label": text.Label(
-                ObserverMotionMode.EARTH_ROTATION.label,
+            "observer_frame_label": text.Label(
+                ObserverFrame.EARTH_ROTATION.label,
                 font_size=LABEL_FONT_SIZE,
                 color=(80, 220, 255, 255),
                 anchor_x="center",
@@ -130,8 +130,8 @@ class EarthCenteredViewer(SceneViewer):
 
     @override
     def on_mouse_press(self, x: int, y: int, buttons: int, modifiers: int) -> None:
-        if buttons == pyglet.window.mouse.LEFT and self._motion_mode_button_contains(x, y):
-            self._cycle_observer_motion_mode()
+        if buttons == pyglet.window.mouse.LEFT and self._observer_frame_button_contains(x, y):
+            self._cycle_observer_frame()
             return
         super().on_mouse_press(x, y, buttons, modifiers)
 
@@ -246,7 +246,7 @@ class EarthCenteredViewer(SceneViewer):
         fps_label.x = FPS_LABEL_MARGIN
         fps_label.y = height - FPS_LABEL_MARGIN
         fps_label.draw()
-        self._draw_motion_mode_button(width, height)
+        self._draw_observer_frame_button(width, height)
         gl.glDisable(gl.GL_BLEND)
 
         gl.glPopMatrix()
@@ -255,10 +255,10 @@ class EarthCenteredViewer(SceneViewer):
         gl.glMatrixMode(gl.GL_MODELVIEW)
         gl.glEnable(gl.GL_DEPTH_TEST)
 
-    def _motion_mode_button_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
-        left = width - MOTION_MODE_BUTTON_MARGIN - MOTION_MODE_BUTTON_WIDTH
-        bottom = MOTION_MODE_BUTTON_MARGIN
-        return left, bottom, left + MOTION_MODE_BUTTON_WIDTH, bottom + MOTION_MODE_BUTTON_HEIGHT
+    def _observer_frame_button_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
+        left = width - OBSERVER_FRAME_BUTTON_MARGIN - OBSERVER_FRAME_BUTTON_WIDTH
+        bottom = OBSERVER_FRAME_BUTTON_MARGIN
+        return left, bottom, left + OBSERVER_FRAME_BUTTON_WIDTH, bottom + OBSERVER_FRAME_BUTTON_HEIGHT
 
     def _window_to_viewport(self, x: int, y: int) -> tuple[float, float]:
         window_width, window_height = self.get_size()
@@ -270,14 +270,14 @@ class EarthCenteredViewer(SceneViewer):
             y * viewport_height / window_height,
         )
 
-    def _motion_mode_button_contains(self, x: int, y: int) -> bool:
+    def _observer_frame_button_contains(self, x: int, y: int) -> bool:
         viewport_x, viewport_y = self._window_to_viewport(x, y)
         width, height = self.get_viewport_size()
-        left, bottom, right, top = self._motion_mode_button_bounds(width, height)
+        left, bottom, right, top = self._observer_frame_button_bounds(width, height)
         return left <= viewport_x <= right and bottom <= viewport_y <= top
 
-    def _draw_motion_mode_button(self, width: int, height: int) -> None:
-        left, bottom, right, top = self._motion_mode_button_bounds(width, height)
+    def _draw_observer_frame_button(self, width: int, height: int) -> None:
+        left, bottom, right, top = self._observer_frame_button_bounds(width, height)
         pyglet.graphics.draw(
             4,
             gl.GL_QUADS,
@@ -314,18 +314,18 @@ class EarthCenteredViewer(SceneViewer):
             ),
             ("c4B", (80, 220, 255, 255) * 4),
         )
-        motion_mode = self.scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
-        label = self._state["motion_mode_label"]
-        label.text = motion_mode.label
+        observer_frame = self.scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
+        label = self._state["observer_frame_label"]
+        label.text = observer_frame.label
         label.x = (left + right) // 2
         label.y = (bottom + top) // 2
         label.draw()
 
-    def _cycle_observer_motion_mode(self) -> None:
-        modes = list(ObserverMotionMode)
-        current_mode = self.scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
-        next_mode = modes[(modes.index(current_mode) + 1) % len(modes)]
-        self.scene.metadata["observer_motion_mode"] = next_mode
+    def _cycle_observer_frame(self) -> None:
+        frames = list(ObserverFrame)
+        current_frame = self.scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
+        next_frame = frames[(frames.index(current_frame) + 1) % len(frames)]
+        self.scene.metadata["observer_frame"] = next_frame
         self.scene._redraw()
 
 

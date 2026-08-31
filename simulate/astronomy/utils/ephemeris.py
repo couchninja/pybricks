@@ -23,7 +23,7 @@ from simulate.astronomy.constants import (
     KPC_TO_AU,
     SIDEREAL_DAY,
     SOLAR_GALACTIC_ORBITAL_SPEED,
-    ObserverMotionMode,
+    ObserverFrame,
 )
 
 # Keep Astropy's default IERS auto-download when online. Offline (or when the
@@ -210,13 +210,13 @@ def current_time() -> Time:
     return Time.now()
 
 
-def observer_surface_vector_and_euler_angles_for_mode(
-    time: Time, motion_mode: ObserverMotionMode
+def observer_surface_vector_and_euler_angles_for_frame(
+    time: Time, observer_frame: ObserverFrame
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Surface-frame velocity direction and heading for an observer motion mode.
+    """Surface-frame velocity direction and heading for an observer frame.
 
     Uses the ecliptic velocity from ``observer_velocity_ecliptic_au_per_s`` for
-    ``motion_mode``, normalizes it to a unit direction, and expresses that direction
+    ``observer_frame``, normalizes it to a unit direction, and expresses that direction
     in the observer's local surface frame (see ``ecliptic_to_observer_surface``).
 
     Returns ``(surface_vector, euler_angles, speed)``:
@@ -236,7 +236,7 @@ def observer_surface_vector_and_euler_angles_for_mode(
 
     When speed is zero, ``surface_vector`` and ``euler_angles`` are both zero.
     """
-    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
+    velocity = observer_velocity_ecliptic_au_per_s(time, observer_frame)
     speed = float(np.linalg.norm(velocity))
     if speed == 0.0:
         return np.zeros(3, dtype=float), np.zeros(3, dtype=float), speed
@@ -245,27 +245,27 @@ def observer_surface_vector_and_euler_angles_for_mode(
     return surface_vector, euler_angles, speed
 
 
-def observer_velocity_ecliptic_au_per_s(time: Time, mode: ObserverMotionMode) -> np.ndarray:
-    if mode not in ObserverMotionMode:
-        raise ValueError(f"unknown observer motion mode: {mode}")
+def observer_velocity_ecliptic_au_per_s(time: Time, frame: ObserverFrame) -> np.ndarray:
+    if frame not in ObserverFrame:
+        raise ValueError(f"unknown observer frame: {frame}")
 
     velocity = np.zeros(3, dtype=float)
-    if mode in (
-        ObserverMotionMode.EARTH_ROTATION,
-        ObserverMotionMode.SUN_ORBIT,
-        ObserverMotionMode.MILKY_WAY_ORBIT,
-        ObserverMotionMode.CMB_DIPOLE,
+    if frame in (
+        ObserverFrame.EARTH_ROTATION,
+        ObserverFrame.SUN_ORBIT,
+        ObserverFrame.MILKY_WAY_ORBIT,
+        ObserverFrame.CMB_DIPOLE,
     ):
         velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
-    if mode in (
-        ObserverMotionMode.SUN_ORBIT,
-        ObserverMotionMode.MILKY_WAY_ORBIT,
-        ObserverMotionMode.CMB_DIPOLE,
+    if frame in (
+        ObserverFrame.SUN_ORBIT,
+        ObserverFrame.MILKY_WAY_ORBIT,
+        ObserverFrame.CMB_DIPOLE,
     ):
         velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
-    if mode in (ObserverMotionMode.MILKY_WAY_ORBIT, ObserverMotionMode.CMB_DIPOLE):
+    if frame in (ObserverFrame.MILKY_WAY_ORBIT, ObserverFrame.CMB_DIPOLE):
         velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
-    if mode == ObserverMotionMode.CMB_DIPOLE:
+    if frame == ObserverFrame.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
 

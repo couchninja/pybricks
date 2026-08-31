@@ -4,8 +4,8 @@ from pybricks.parameters import Port
 
 from hub_client import MoveHub, Motor
 from hub_client.starpoint.buttons import ButtonData, StarpointButtons
-from simulate.astronomy.constants import ObserverMotionMode
-from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_mode
+from simulate.astronomy.constants import ObserverFrame
+from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_frame
 
 INACTIVITY_REFRESH_S = 10.0
 
@@ -33,13 +33,13 @@ async def calibrate_motors(hub: MoveHub) -> None:
     await motorPan.reset_angle(-10)
     await motorTilt.reset_angle(-90)
 
-async def point_at_mode(hub: MoveHub, mode: ObserverMotionMode) -> None:
-    print(f"Pointing at mode: {mode.label}")
+async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
+    print(f"Pointing at frame: {frame.label}")
     motorPan = hub.motor(Port.B)
     motorTilt = hub.motor(Port.C)
 
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_mode(
-        current_time(), mode
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_frame(
+        current_time(), frame
     )
 
     print(f"Raw yaw: {yaw} degrees. Pitch: {pitch} degrees.")
@@ -73,10 +73,10 @@ async def star_point_main(upload_program: bool = False) -> None:
 
         async def point_selected() -> None:
             async with point_lock:
-                await point_at_mode(hub, buttons.selected_button["mode"])
+                await point_at_frame(hub, buttons.selected_button["frame"])
 
-        async def on_mode_selected(button: ButtonData) -> None:
-            print(f"Mode: {button['mode'].label}")
+        async def on_frame_selected(button: ButtonData) -> None:
+            print(f"Frame: {button['frame'].label}")
             await point_selected()
             activity.set()
 
@@ -88,7 +88,7 @@ async def star_point_main(upload_program: bool = False) -> None:
                 except TimeoutError:
                     await point_selected()
 
-        buttons.on_selection_changed(on_mode_selected)
+        buttons.on_selection_changed(on_frame_selected)
 
         await point_selected()
         await asyncio.gather(buttons.run(), refresh_on_inactivity())
