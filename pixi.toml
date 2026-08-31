@@ -29,6 +29,7 @@ wifi-on = "sudo nmcli radio wifi on"
 
 wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORITY connection"
 gpio-buttons = "sudo .pixi/envs/default/bin/python scripts/gpio_buttons.py"
+starpoint_buttons = "sudo env PYTHONPATH=. .pixi/envs/default/bin/python scripts/starpoint_buttons.py"
 
 [dependencies]
 micropython = ">=1.28.0,<2"
