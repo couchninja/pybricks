@@ -7,6 +7,10 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
   - can only be set for all of cursor
 
 # raspberry hardware
+## sudo GPIO
+- In order to use the pins (gpiod) without sudo:
+  - ```sudo usermod -aG dialout "$USER"```
+  - reboot
 ## WiFi
 - raspberry pi 4b does not want to reliably connect to lego brick over BLE if wifi is turned on: connect to raspberry over ethernet. It does not seem needed to turn off the wifi.
 - update: I reconnected over wifi, and BLE connectivity seems fine; keep an eye on it
@@ -14,6 +18,7 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
   - instead I connected over ethernet
   - and then had to do: "pixi run wifi-off && pixi run wifi-on"
     - perhaps I can run that still connected to wifi
+## Keep it Light
 - The raspberry can hang if it is pushed too hard:
   - Cursor plugins: only install python
   - Don't run too many agents simultaneously
@@ -112,9 +117,9 @@ asyncio.run(main())
 
 | Port | Device |
 |------|--------|
-| A | Motor (clockwise) |
-| B | Motor (counter-clockwise) |
-| C | Motor (counter-clockwise) |
+| A | Built-in Motor |
+| B | Built-in Motor |
+| C | External Motor |
 | D | Color/distance sensor |
 
 ## Troubleshooting
@@ -122,5 +127,4 @@ asyncio.run(main())
 - **Hub not found**: Turn the hub on, move it closer, and make sure it is not connected to the Pybricks app or another computer.
 - **Upload fails or disconnects**: Run `pixi run hub-stop`, wait a moment, then try `pixi run hub-run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
 - **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again.
-- **Passive scan / BleakError on Linux**: Active scanning is used by default. If scanning still fails, ensure Bluetooth is enabled and no other app is using the adapter.
 - **Commands time out**: Make sure the hub program is the latest upload (`pixi run hub-run` or reconnect with upload). Close Pybricks Code and other BLE connections to the hub.
