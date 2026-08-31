@@ -50,27 +50,27 @@ Bluetooth must be enabled on this machine. On Linux, your user needs permission 
 Find your hub:
 
 ```sh
-pixi run scan
+pixi run ble-scan
 ```
 
 Upload and start the thin-client program on the hub (disconnects when done):
 
 ```sh
-pixi run run
+pixi run hub-run
 ```
 
 Other deploy commands:
 
 ```sh
-pixi run stop       # stop the program on the hub
-pixi run upload     # upload without starting
-pixi run dev        # interactive mode: re-upload after edits without reconnecting
+pixi run hub-stop       # stop the program on the hub
+pixi run hub-upload     # upload without starting
+pixi run hub-dev        # interactive mode: re-upload after edits without reconnecting
 ```
 
 Target a specific hub by name or address:
 
 ```sh
-pixi run python scripts/ble_control.py -n "Move Hub" run pybricks/main.py
+pixi run python pybricks_client/ble_control.py -n "Move Hub" run pybricks_hub/main.py
 ```
 
 ## Run tests from this machine
@@ -79,7 +79,7 @@ With the hub program deployed, run the built-in tests (blink light, pulse
 motors, read sensor):
 
 ```sh
-pixi run test
+pixi run test-hub
 ```
 
 The test script connects over BLE, uploads the hub program if needed, and then
@@ -90,7 +90,7 @@ drives the hardware through the remote API.
 ```python
 import asyncio
 from pybricks.parameters import Color, Direction, Port
-from hub_client import MoveHub
+from pybricks_client import MoveHub
 
 async def main():
     async with MoveHub.connect() as hub:
@@ -108,7 +108,7 @@ asyncio.run(main())
 
 ## Hub wiring defaults
 
-`pybricks/main.py` maps ports as follows (edit to match your setup):
+`pybricks_hub/main.py` maps ports as follows (edit to match your setup):
 
 | Port | Device |
 |------|--------|
@@ -120,7 +120,7 @@ asyncio.run(main())
 ## Troubleshooting
 
 - **Hub not found**: Turn the hub on, move it closer, and make sure it is not connected to the Pybricks app or another computer.
-- **Upload fails or disconnects**: Run `pixi run stop`, wait a moment, then try `pixi run run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
+- **Upload fails or disconnects**: Run `pixi run hub-stop`, wait a moment, then try `pixi run hub-run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
 - **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again.
 - **Passive scan / BleakError on Linux**: Active scanning is used by default. If scanning still fails, ensure Bluetooth is enabled and no other app is using the adapter.
-- **Commands time out**: Make sure the hub program is the latest upload (`pixi run run` or reconnect with upload). Close Pybricks Code and other BLE connections to the hub.
+- **Commands time out**: Make sure the hub program is the latest upload (`pixi run hub-run` or reconnect with upload). Close Pybricks Code and other BLE connections to the hub.

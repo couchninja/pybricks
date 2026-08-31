@@ -9,8 +9,8 @@ import sys
 
 from pybricks.parameters import Color, Direction, Port
 
-from hub_client import MoveHub
-from hub_client.client import _color_name
+from pybricks_client import MoveHub
+from pybricks_client.client import _color_name
 
 
 async def test_motors(hub: MoveHub) -> None:

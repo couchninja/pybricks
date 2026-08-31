@@ -9,7 +9,7 @@ import sys
 
 from pybricksdev.connections.pybricks import PybricksHubBLE
 
-from hub_client.ble import (
+from pybricks_client.ble import (
     RECOVERABLE_ERRORS,
     connect,
     disconnect_hub,
@@ -184,7 +184,7 @@ def main() -> None:
     except RECOVERABLE_ERRORS as exc:
         print(f"Failed: {format_error(exc)}", file=sys.stderr)
         print(
-            "Tip: if the hub is running a program, power-cycle it, then run `pixi run stop`.",
+            "Tip: if the hub is running a program, power-cycle it, then run `pixi run hub-stop`.",
             file=sys.stderr,
         )
         sys.exit(1)
