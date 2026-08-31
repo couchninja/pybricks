@@ -108,12 +108,18 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
                 await point_selected()
 
     buttons.on_selection_changed(on_frame_selected)
-    await point_selected()
-    await asyncio.gather(buttons.run(), refresh_on_inactivity())
+    try:
+        await point_selected()
+        await asyncio.gather(buttons.run(), refresh_on_inactivity())
+    finally:
+        try:
+            await sensor.light.off()
+        except RECOVERABLE_ERRORS:
+            pass
 
 
-async def star_point_main(upload_program: bool = False) -> None:
-    print("Star point main")
+async def navigator_main(upload_program: bool = False) -> None:
+    print("Navigator main")
     program = "pybricks_hub/main.py" if upload_program else None
 
     with ButtonMenu() as buttons:
@@ -130,4 +136,4 @@ async def star_point_main(upload_program: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(star_point_main(upload_program=False))
+    asyncio.run(navigator_main(upload_program=False))

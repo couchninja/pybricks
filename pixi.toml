@@ -10,8 +10,8 @@ env = { PYTHONPATH = "." }
 [tasks]
 astronomy-viewer = "python simulate/astronomy/viewer.py"
 astronomy-viewer-watch = "python -m watchfiles --filter python \"python simulate/astronomy/viewer.py\" simulate/astronomy/"
-starpoint = "sudo env PYTHONPATH=. .pixi/envs/default/bin/python starpoint/starpoint_main.py"
-motion-range = "python starpoint/motion_range_main.py"
+navigator = "python navigator/navigator_main.py"
+motion-range = "python navigator/motion_range_main.py"
 hub-run = "python pybricks_client/ble_control.py run pybricks_hub/main.py --no-wait"
 hub-dev = "pybricksdev run ble pybricks_hub/main.py --stay-connected"
 ble-scan = "python pybricks_client/ble_control.py scan"

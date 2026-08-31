@@ -82,13 +82,14 @@ class ButtonMenu:
     def __enter__(self) -> ButtonMenu:
         self._request = gpiod.request_lines(
             self._chip,
-            consumer="starpoint-buttons",
+            consumer="navigator-buttons",
             config=self._line_config(),
         )
         return self
 
     def __exit__(self, *exc: object) -> None:
         if self._request is not None:
+            self.all_leds_off()
             self._request.release()
             self._request = None
 
@@ -106,6 +107,10 @@ class ButtonMenu:
 
     def on_selection_changed(self, listener: ButtonListener) -> None:
         self._selection_listeners = [listener]
+
+    def all_leds_off(self) -> None:
+        for button in self._buttons:
+            self._set_led(button["led_pin"], False)
 
     @asynccontextmanager
     async def blinking(
