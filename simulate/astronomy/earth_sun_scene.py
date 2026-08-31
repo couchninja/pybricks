@@ -1,4 +1,4 @@
-"""Earth-sun and Milky Way visualization.
+"""Earth-sun and Milky Way scene graph and animation.
 
 Scene graph:
   root_frame
@@ -15,31 +15,19 @@ The graph stacks two independent concerns:
    origin, Earth and its orbit underneath). The edge ``milky_way -> solar_system``
    carries the ecliptic-to-galactic rotation and the Sun's galactocentric position.
 
-2. Viewer recentering (display only). ``earth_center`` translates the entire
-   subtree by ``-earth_root`` each frame so Earth stays at ``EARTH_CENTER_ORIGIN``.
-   The camera and trackball orbit that fixed origin. ``earth_center`` parents
-   ``milky_way`` not because Earth contains the galaxy, but because every body —
-   solar-system and galactic — must shift together when recentering. If galactic
-   geometry sat outside ``earth_center``, it would stay fixed in root-frame space while
-   only the solar system moved, breaking relative positions.
+2. Display recentering. ``earth_center`` translates the entire subtree by
+   ``-earth_root`` each frame so Earth stays at ``EARTH_CENTER_ORIGIN``. The camera
+   and trackball orbit that fixed origin. ``earth_center`` parents ``milky_way`` not
+   because Earth contains the galaxy, but because every body — solar-system and
+   galactic — must shift together when recentering. If galactic geometry sat outside
+   ``earth_center``, it would stay fixed in root-frame space while only the solar
+   system moved, breaking relative positions.
 
 Galactic kpc positions come from ephemeris at true scale, then multiplied by
 GALACTIC_ORBIT_DISTANCE_SCALE after kpc->AU conversion (1 = true scale; solar-system
 geometry stays true AU). Only lengths are scaled, not the ecliptic-to-galactic rotation.
-
-Viewer note: Trimesh's SceneViewer shifts GL_LINES in camera space by scene.scale / 1000
-to reduce z-fighting. Galactic geometry sets scene.scale, so the default offset visibly
-displaces orbit lines while meshes (sun, earth) stay put. Pass offset_lines=False so orbit
-paths align with the bodies they describe.
-
-Camera note: Trimesh's default z_near is 0.01 AU. Exaggerated Earth is much smaller, so
-zooming in clips the planet unless z_near is reduced. z_near is clamped by MAX_DEPTH_RATIO
-and OPENGL_Z_NEAR_MIN_AU because gluPerspective rejects smaller near planes on macOS.
-z_far is set from camera distance plus scene scale so galactic geometry stays visible
-when zooming out.
 """
 
-import warnings
 from time import perf_counter
 from typing import TypedDict
 
@@ -47,18 +35,15 @@ import numpy as np
 import trimesh
 from astropy import units as u
 from astropy.time import Time
-from erfa import ErfaWarning
 from trimesh.visual.color import ColorVisuals
 
 from simulate.astronomy.constants import (
-    ANIMATION_CALLBACK_PERIOD,
     AXIS_COLOR,
     AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
     AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     CAMERA_DISTANCE_EARTH_RADII,
     CMB_DIPOLE_ARROW_COLOR,
     EARTH_CENTER_FRAME,
-    EARTH_CENTER_ORIGIN,
     EARTH_ORBIT_COLOR,
     EARTH_ORBIT_SEGMENTS,
     EARTH_RADIUS_AU,
@@ -69,7 +54,6 @@ from simulate.astronomy.constants import (
     GALACTIC_ORBIT_COLOR,
     GALACTIC_ORBIT_DISTANCE_SCALE,
     KPC_TO_AU,
-    LINE_WIDTH_PIXELS,
     MILKY_WAY_FRAME,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
@@ -88,7 +72,7 @@ from simulate.astronomy.constants import (
     YEAR_BOUNDARY_COLOR,
     ObserverFrame,
 )
-from simulate.astronomy.earth_centered_viewer import EarthCenteredViewer
+from simulate.astronomy.utils.camera import camera_distance_au, camera_distance_to_point_au
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
     cmb_dipole_direction_galactocentric,
@@ -126,41 +110,6 @@ class EarthSunState(TypedDict):
     sun_galactic_position: np.ndarray
     galactic_axis_half_length_au: float
     galactic_center_radius_au: float
-
-
-def show_earth_sun(
-    time: Time | None = None,
-    *,
-    time_scaling: float = 1.0,
-) -> None:
-    warnings.filterwarnings("ignore", message=".*dubious year.*", category=ErfaWarning)
-
-    if time is None:
-        time = current_time()
-
-    scene = build_earth_sun_scene(time)
-    scene.set_camera(
-        center=EARTH_CENTER_ORIGIN,
-        distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
-    )
-    scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
-        start_time=time,
-        last_orbit_time=None,
-        time_scaling=time_scaling,
-        wall_start=None,
-        current_time=time,
-    )
-    scene.metadata["observer_frame"] = ObserverFrame.EARTH_ROTATION
-    # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
-    scene.show(
-        viewer=EarthCenteredViewer,
-        camera_distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
-        offset_lines=False,
-        line_settings={"line_width": LINE_WIDTH_PIXELS},
-        callback=_earth_sun_animation_callback,
-        callback_period=ANIMATION_CALLBACK_PERIOD,
-        caption=f"Earth-sun ({time.iso})",
-    )
 
 
 def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
@@ -291,7 +240,7 @@ def update_earth_sun_scene(
         MILKY_WAY_FRAME,
         matrix=_cmb_dipole_arrow_transform(
             time,
-            _camera_distance_to_point_au(scene, _galactic_center_position(state)),
+            camera_distance_to_point_au(scene, _galactic_center_position(state)),
             state["galactic_center_radius_au"],
         ),
     )
@@ -322,7 +271,7 @@ def update_earth_sun_scene(
     return last_orbit_time
 
 
-def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
+def earth_sun_animation_callback(scene: trimesh.Scene) -> None:
     animation = scene.metadata["earth_sun_animation"]
     if animation["wall_start"] is None:
         animation["wall_start"] = perf_counter()
@@ -334,7 +283,7 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
         scene,
         time,
         animation["last_orbit_time"],
-        _camera_distance_au(scene),
+        camera_distance_au(scene),
     )
     global last_orientation_print
     if now - last_orientation_print >= 10.0:
@@ -344,24 +293,12 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 
 def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
     observer_frame = scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
-    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_frame(
-        time, observer_frame
-    )
+    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_frame(time, observer_frame)
     print(  # noqa: T201
         f"{observer_frame}: "
         f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
         f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg"
     )
-
-
-def _camera_distance_au(scene: trimesh.Scene) -> float:
-    eye = scene.camera_transform[:3, 3]
-    return float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
-
-
-def _camera_distance_to_point_au(scene: trimesh.Scene, point: np.ndarray) -> float:
-    eye = scene.camera_transform[:3, 3]
-    return float(np.linalg.norm(eye - point))
 
 
 def _galactic_center_position(state: EarthSunState) -> np.ndarray:
@@ -571,10 +508,3 @@ def _print_scene_graph(scene: trimesh.Scene) -> None:
 
     print("Scene graph:")  # noqa: T201
     print_node(root, 0)
-
-
-if __name__ == "__main__":
-    show_earth_sun()
-    # show_earth_sun(time_scaling=86_400)  # 1 day per second
-    # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
-    # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
