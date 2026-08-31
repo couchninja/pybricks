@@ -105,7 +105,7 @@ class ButtonMenu:
         return self._buttons[self._selected_index]
 
     def on_selection_changed(self, listener: ButtonListener) -> None:
-        self._selection_listeners.append(listener)
+        self._selection_listeners = [listener]
 
     @asynccontextmanager
     async def blinking(
