@@ -99,9 +99,8 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
-    ecliptic_to_observer_surface,
     observer_direction_ecliptic,
-    observer_surface_euler_angles,
+    observer_surface_vector_and_euler_angles_for_mode,
     observer_velocity_ecliptic_au_per_s,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
@@ -345,14 +344,7 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 
 def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
     motion_mode = scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
-    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
-    speed = float(np.linalg.norm(velocity))
-    if speed == 0.0:
-        print(f"{motion_mode}: surface [0, 0, 0]  euler [0, 0, 0] deg")  # noqa: T201
-        return
-    direction = velocity / speed
-    surface = ecliptic_to_observer_surface(direction, time)
-    yaw, pitch, roll = np.degrees(observer_surface_euler_angles(surface))
+    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_mode(time, motion_mode)
     print(  # noqa: T201
         f"{motion_mode}: "
         f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
