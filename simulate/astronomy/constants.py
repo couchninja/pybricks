@@ -33,7 +33,7 @@ GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
 
 # Default Trimesh z_near is 0.01 AU, larger than exaggerated Earth (~0.0009 AU).
 CAMERA_Z_NEAR_EARTH_RADII = 0.01
-# z_far = camera distance + scene.scale * this multiplier (see _camera_clip_planes).
+# z_far = camera distance + scene.scale * this multiplier (see viewer clip planes).
 CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER = 2.0
 # gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
 MAX_DEPTH_RATIO = 5e7

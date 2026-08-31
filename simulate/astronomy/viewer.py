@@ -1,3 +1,18 @@
+"""Earth-centered interactive viewer for the astronomy scene.
+
+Trimesh's SceneViewer shifts GL_LINES in camera space by scene.scale / 1000 to reduce
+z-fighting. Galactic geometry sets scene.scale, so the default offset visibly displaces
+orbit lines while meshes (sun, earth) stay put. Pass offset_lines=False so orbit paths
+align with the bodies they describe.
+
+Trimesh's default z_near is 0.01 AU. Exaggerated Earth is much smaller, so zooming in
+clips the planet unless z_near is reduced. z_near is clamped by MAX_DEPTH_RATIO and
+OPENGL_Z_NEAR_MIN_AU because gluPerspective rejects smaller near planes on macOS.
+z_far is set from camera distance plus scene scale so galactic geometry stays visible
+when zooming out.
+"""
+
+import warnings
 from ctypes import byref
 from time import perf_counter
 from typing import Any, NamedTuple, TypedDict, override
@@ -5,12 +20,16 @@ from typing import Any, NamedTuple, TypedDict, override
 import numpy as np
 import pyglet
 import trimesh
+from astropy.time import Time
+from erfa import ErfaWarning
 from pyglet import gl, text
 from pyglet.gl.glu import gluProject
 from trimesh.viewer.trackball import Trackball
 from trimesh.viewer.windowed import SceneViewer
 
 from simulate.astronomy.constants import (
+    ANIMATION_CALLBACK_PERIOD,
+    CAMERA_DISTANCE_EARTH_RADII,
     CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER,
     CAMERA_Z_NEAR_EARTH_RADII,
     EARTH_CENTER_ORIGIN,
@@ -18,6 +37,7 @@ from simulate.astronomy.constants import (
     FPS_LABEL_MARGIN,
     LABEL_FONT_SIZE,
     LABEL_OFFSET_BODY_RADII,
+    LINE_WIDTH_PIXELS,
     MAX_DEPTH_RATIO,
     OBSERVER_FRAME_BUTTON_HEIGHT,
     OBSERVER_FRAME_BUTTON_MARGIN,
@@ -27,6 +47,13 @@ from simulate.astronomy.constants import (
     TRACKBALL_SCALE_AU,
     ObserverFrame,
 )
+from simulate.astronomy.earth_sun_scene import (
+    EarthSunAnimationState,
+    build_earth_sun_scene,
+    earth_sun_animation_callback,
+)
+from simulate.astronomy.utils.camera import camera_distance_au
+from simulate.astronomy.utils.ephemeris import current_time
 
 try:
     # macOS focuses inactive windows without delivering the first mouse click.
@@ -39,6 +66,41 @@ try:
         return True
 except Exception:
     pass
+
+
+def show_earth_sun(
+    time: Time | None = None,
+    *,
+    time_scaling: float = 1.0,
+) -> None:
+    warnings.filterwarnings("ignore", message=".*dubious year.*", category=ErfaWarning)
+
+    if time is None:
+        time = current_time()
+
+    scene = build_earth_sun_scene(time)
+    scene.set_camera(
+        center=EARTH_CENTER_ORIGIN,
+        distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
+    )
+    scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
+        start_time=time,
+        last_orbit_time=None,
+        time_scaling=time_scaling,
+        wall_start=None,
+        current_time=time,
+    )
+    scene.metadata["observer_frame"] = ObserverFrame.EARTH_ROTATION
+    # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
+    scene.show(
+        viewer=EarthCenteredViewer,
+        camera_distance=CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
+        offset_lines=False,
+        line_settings={"line_width": LINE_WIDTH_PIXELS},
+        callback=earth_sun_animation_callback,
+        callback_period=ANIMATION_CALLBACK_PERIOD,
+        caption=f"Earth-sun ({time.iso})",
+    )
 
 
 class _EarthCenteredViewerState(TypedDict):
@@ -330,8 +392,7 @@ class EarthCenteredViewer(SceneViewer):
 
 
 def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
-    eye = scene.camera_transform[:3, 3]
-    camera_distance = float(np.linalg.norm(eye - EARTH_CENTER_ORIGIN))
+    camera_distance = camera_distance_au(scene)
     try:
         scene_scale = float(scene.scale)
     except Exception:
@@ -379,3 +440,10 @@ def _world_to_screen_gl(world: np.ndarray) -> tuple[float, float] | None:
     if win_z.value < 0.0 or win_z.value > 1.0:
         return None
     return float(win_x.value), float(win_y.value)
+
+
+if __name__ == "__main__":
+    show_earth_sun()
+    # show_earth_sun(time_scaling=86_400)  # 1 day per second
+    # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
+    # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
