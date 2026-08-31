@@ -7,6 +7,9 @@ from hub_client.starpoint.buttons import ButtonData, StarpointButtons
 from simulate.astronomy.constants import ObserverMotionMode
 from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_mode
 
+INACTIVITY_REFRESH_S = 10.0
+
+
 def clamp_yaw(yaw: float) -> float:
     return min(yaw % 360, 340)
 
@@ -34,7 +37,7 @@ async def point_at_mode(hub: MoveHub, mode: ObserverMotionMode) -> None:
     print(f"Pointing at mode: {mode.label}")
     motorPan = hub.motor(Port.B)
     motorTilt = hub.motor(Port.C)
-    
+
     _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_mode(
         current_time(), mode
     )
@@ -65,16 +68,30 @@ async def star_point_main(upload_program: bool = False) -> None:
         await calibrate_motors(hub)
 
         buttons = StarpointButtons()
+        activity = asyncio.Event()
+        point_lock = asyncio.Lock()
+
+        async def point_selected() -> None:
+            async with point_lock:
+                await point_at_mode(hub, buttons.selected_button["mode"])
 
         async def on_mode_selected(button: ButtonData) -> None:
             print(f"Mode: {button['mode'].label}")
-            await point_at_mode(hub, button["mode"])
+            await point_selected()
+            activity.set()
+
+        async def refresh_on_inactivity() -> None:
+            while True:
+                activity.clear()
+                try:
+                    await asyncio.wait_for(activity.wait(), timeout=INACTIVITY_REFRESH_S)
+                except TimeoutError:
+                    await point_selected()
 
         buttons.on_selection_changed(on_mode_selected)
-        buttons_task = asyncio.create_task(buttons.run())
 
-        await point_at_mode(hub, buttons.selected_button["mode"])
-        await buttons_task
+        await point_selected()
+        await asyncio.gather(buttons.run(), refresh_on_inactivity())
 
 
 if __name__ == "__main__":
