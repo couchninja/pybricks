@@ -59,9 +59,7 @@ def main() -> None:
                 last_event_s[button] = now
 
                 high[led] = not high[led]
-                request.set_value(
-                    led, Value.ACTIVE if high[led] else Value.INACTIVE
-                )
+                request.set_value(led, Value.ACTIVE if high[led] else Value.INACTIVE)
                 print(f"GPIO {led} {'HIGH' if high[led] else 'LOW'}")
 
 

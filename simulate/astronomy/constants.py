@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 import numpy as np
 from astropy import units as u
 
@@ -60,12 +62,23 @@ CMB_DIPOLE_SPEED = 369.82 * u.km / u.s
 CMB_DIPOLE_L = 264.021 * u.deg
 CMB_DIPOLE_B = 48.253 * u.deg
 
-OBSERVER_MOTION_MODES = ("earth_rotation", "sun_orbit", "milky_way_orbit", "cmb_dipole")
-OBSERVER_MOTION_LABELS = {
-    "earth_rotation": "Earth rotation",
-    "sun_orbit": "Sun orbit",
-    "milky_way_orbit": "Milky Way orbit",
-    "cmb_dipole": "CMB dipole",
+
+class ObserverMotionMode(StrEnum):
+    EARTH_ROTATION = "earth_rotation"
+    SUN_ORBIT = "sun_orbit"
+    MILKY_WAY_ORBIT = "milky_way_orbit"
+    CMB_DIPOLE = "cmb_dipole"
+
+    @property
+    def label(self) -> str:
+        return _OBSERVER_MOTION_LABELS[self]
+
+
+_OBSERVER_MOTION_LABELS = {
+    ObserverMotionMode.EARTH_ROTATION: "Earth rotation",
+    ObserverMotionMode.SUN_ORBIT: "Sun orbit",
+    ObserverMotionMode.MILKY_WAY_ORBIT: "Milky Way orbit",
+    ObserverMotionMode.CMB_DIPOLE: "CMB dipole",
 }
 MOTION_MODE_BUTTON_MARGIN = 8
 MOTION_MODE_BUTTON_WIDTH = 200
