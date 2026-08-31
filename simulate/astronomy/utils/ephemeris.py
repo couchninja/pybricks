@@ -199,6 +199,39 @@ def current_time() -> Time:
     return Time.now()
 
 
+def observer_surface_vector_and_euler_angles_for_mode(
+    time: Time, motion_mode: ObserverMotionMode
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Surface-frame velocity direction and heading for an observer motion mode.
+
+    Uses the ecliptic velocity from ``observer_velocity_ecliptic_au_per_s`` for
+    ``motion_mode``, normalizes it to a unit direction, and expresses that direction
+    in the observer's local surface frame (see ``ecliptic_to_observer_surface``).
+
+    Returns ``(surface_vector, euler_angles, speed)``:
+
+    surface_vector
+      Components of the velocity direction in the surface frame:
+        x — north, y — east, z — up (local zenith).
+    euler_angles
+      ``[yaw, pitch, roll]`` in degrees derived from ``surface_vector``:
+        yaw — heading from north toward east (0 = north, 90 = east)
+        pitch — elevation above the horizon (0 = horizon, 90 = zenith)
+        roll — always 0 (a direction does not determine roll)
+    speed
+      Speed of the ecliptic velocity vector in AU/s.
+
+    When speed is zero, ``surface_vector`` and ``euler_angles`` are both zero.
+    """
+    velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
+    speed = float(np.linalg.norm(velocity))
+    if speed == 0.0:
+        return np.zeros(3, dtype=float), np.zeros(3, dtype=float), speed
+    surface_vector = ecliptic_to_observer_surface(velocity / speed, time)
+    euler_angles = np.degrees(observer_surface_euler_angles(surface_vector))
+    return surface_vector, euler_angles, speed
+
+
 def observer_velocity_ecliptic_au_per_s(time: Time, mode: ObserverMotionMode) -> np.ndarray:
     if mode not in ObserverMotionMode:
         raise ValueError(f"unknown observer motion mode: {mode}")
