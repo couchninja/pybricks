@@ -1,6 +1,5 @@
 import numpy as np
 from astropy import units as u
-from astropy.utils.iers import conf as iers_conf
 from astropy.coordinates import (
     GCRS,
     ITRS,
@@ -13,6 +12,7 @@ from astropy.coordinates import (
     get_body_barycentric,
 )
 from astropy.time import Time
+from astropy.utils.iers import conf as iers_conf
 from scipy.spatial.transform import Rotation
 
 from simulate.astronomy.constants import (
@@ -26,8 +26,13 @@ from simulate.astronomy.constants import (
     ObserverMotionMode,
 )
 
-iers_conf.auto_download = False
-iers_conf.auto_max_age = None
+# Keep Astropy's default IERS auto-download when online. Offline (or when the
+# download fails), the probe raises ValueError once predictive data is older
+# than auto_max_age; allow the bundled table instead of crashing.
+try:
+    Time.now().ut1
+except ValueError:
+    iers_conf.auto_max_age = None
 
 # Netherlands
 OBSERVER_LAT = 52.1326 * u.deg
