@@ -73,7 +73,6 @@ from simulate.astronomy.constants import (
     MILKY_WAY_FRAME,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
-    OBSERVER_MOTION_MODES,
     OBSERVER_VELOCITY_ARROW_COLOR,
     OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION,
     OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII,
@@ -87,6 +86,7 @@ from simulate.astronomy.constants import (
     SUN_COLOR,
     SUN_RADIUS_AU,
     YEAR_BOUNDARY_COLOR,
+    ObserverMotionMode,
 )
 from simulate.astronomy.earth_centered_viewer import EarthCenteredViewer
 from simulate.astronomy.utils.earth_mesh import create_earth
@@ -151,7 +151,7 @@ def show_earth_sun(
         wall_start=None,
         current_time=time,
     )
-    scene.metadata["observer_motion_mode"] = OBSERVER_MOTION_MODES[0]
+    scene.metadata["observer_motion_mode"] = ObserverMotionMode.EARTH_ROTATION
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
         viewer=EarthCenteredViewer,
@@ -276,7 +276,7 @@ def update_earth_sun_scene(
         SOLAR_SYSTEM_FRAME,
         matrix=_transform_matrix(np.eye(3), state["observer_position"]),
     )
-    motion_mode = scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+    motion_mode = scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
     scene.graph.update(
         "observer_velocity_arrow",
         SOLAR_SYSTEM_FRAME,
@@ -344,7 +344,7 @@ def _earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 
 
 def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
-    motion_mode = scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+    motion_mode = scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
     velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)
     speed = float(np.linalg.norm(velocity))
     if speed == 0.0:
@@ -463,7 +463,7 @@ def _direction_arrow_transform(
 def _observer_velocity_arrow_transform(
     observer_position: np.ndarray,
     time: Time,
-    motion_mode: str,
+    motion_mode: ObserverMotionMode,
     camera_distance_au: float,
 ) -> np.ndarray:
     velocity = observer_velocity_ecliptic_au_per_s(time, motion_mode)

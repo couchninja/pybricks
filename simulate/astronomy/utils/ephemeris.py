@@ -20,9 +20,9 @@ from simulate.astronomy.constants import (
     CMB_DIPOLE_SPEED,
     EARTH_RADIUS_AU,
     KPC_TO_AU,
-    OBSERVER_MOTION_MODES,
     SIDEREAL_DAY,
     SOLAR_GALACTIC_ORBITAL_SPEED,
+    ObserverMotionMode,
 )
 
 # Netherlands
@@ -199,18 +199,27 @@ def current_time() -> Time:
     return Time.now()
 
 
-def observer_velocity_ecliptic_au_per_s(time: Time, mode: str) -> np.ndarray:
-    if mode not in OBSERVER_MOTION_MODES:
+def observer_velocity_ecliptic_au_per_s(time: Time, mode: ObserverMotionMode) -> np.ndarray:
+    if mode not in ObserverMotionMode:
         raise ValueError(f"unknown observer motion mode: {mode}")
 
     velocity = np.zeros(3, dtype=float)
-    if mode in ("earth_rotation", "sun_orbit", "milky_way_orbit", "cmb_dipole"):
+    if mode in (
+        ObserverMotionMode.EARTH_ROTATION,
+        ObserverMotionMode.SUN_ORBIT,
+        ObserverMotionMode.MILKY_WAY_ORBIT,
+        ObserverMotionMode.CMB_DIPOLE,
+    ):
         velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
-    if mode in ("sun_orbit", "milky_way_orbit", "cmb_dipole"):
+    if mode in (
+        ObserverMotionMode.SUN_ORBIT,
+        ObserverMotionMode.MILKY_WAY_ORBIT,
+        ObserverMotionMode.CMB_DIPOLE,
+    ):
         velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
-    if mode in ("milky_way_orbit", "cmb_dipole"):
+    if mode in (ObserverMotionMode.MILKY_WAY_ORBIT, ObserverMotionMode.CMB_DIPOLE):
         velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
-    if mode == "cmb_dipole":
+    if mode == ObserverMotionMode.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
 

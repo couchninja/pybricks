@@ -22,11 +22,10 @@ from simulate.astronomy.constants import (
     MOTION_MODE_BUTTON_HEIGHT,
     MOTION_MODE_BUTTON_MARGIN,
     MOTION_MODE_BUTTON_WIDTH,
-    OBSERVER_MOTION_LABELS,
-    OBSERVER_MOTION_MODES,
     OPENGL_Z_NEAR_MIN_AU,
     ROOT_FRAME,
     TRACKBALL_SCALE_AU,
+    ObserverMotionMode,
 )
 
 try:
@@ -93,7 +92,7 @@ class EarthCenteredViewer(SceneViewer):
                 anchor_y="top",
             ),
             "motion_mode_label": text.Label(
-                OBSERVER_MOTION_LABELS[OBSERVER_MOTION_MODES[0]],
+                ObserverMotionMode.EARTH_ROTATION.label,
                 font_size=LABEL_FONT_SIZE,
                 color=(80, 220, 255, 255),
                 anchor_x="center",
@@ -315,17 +314,17 @@ class EarthCenteredViewer(SceneViewer):
             ),
             ("c4B", (80, 220, 255, 255) * 4),
         )
-        motion_mode = self.scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
+        motion_mode = self.scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
         label = self._state["motion_mode_label"]
-        label.text = OBSERVER_MOTION_LABELS[motion_mode]
+        label.text = motion_mode.label
         label.x = (left + right) // 2
         label.y = (bottom + top) // 2
         label.draw()
 
     def _cycle_observer_motion_mode(self) -> None:
-        current_mode = self.scene.metadata.get("observer_motion_mode", OBSERVER_MOTION_MODES[0])
-        current_index = OBSERVER_MOTION_MODES.index(current_mode)
-        next_mode = OBSERVER_MOTION_MODES[(current_index + 1) % len(OBSERVER_MOTION_MODES)]
+        modes = list(ObserverMotionMode)
+        current_mode = self.scene.metadata.get("observer_motion_mode", ObserverMotionMode.EARTH_ROTATION)
+        next_mode = modes[(modes.index(current_mode) + 1) % len(modes)]
         self.scene.metadata["observer_motion_mode"] = next_mode
         self.scene._redraw()
 
