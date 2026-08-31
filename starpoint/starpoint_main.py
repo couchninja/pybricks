@@ -6,6 +6,7 @@ from pybricks.parameters import Port
 
 from gpio.button_menu import ButtonData, ButtonMenu
 from pybricks_client import Motor, MoveHub
+from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import ObserverFrame
 from simulate.astronomy.utils.ephemeris import (
     current_time,
@@ -13,6 +14,7 @@ from simulate.astronomy.utils.ephemeris import (
 )
 
 INACTIVITY_REFRESH_S = 10.0
+RECONNECT_DELAY_S = 2.0
 
 
 def clamp_yaw(yaw: float) -> float:
@@ -66,7 +68,17 @@ async def connected_hub(
 ) -> AsyncIterator[MoveHub]:
     async with AsyncExitStack() as stack:
         async with buttons.blinking(0):
-            hub = await stack.enter_async_context(MoveHub.connect(program=program))
+            while True:
+                try:
+                    hub = await stack.enter_async_context(
+                        MoveHub.connect(program=program, retries=1)
+                    )
+                    break
+                except RECOVERABLE_ERRORS as exc:
+                    print(
+                        f"Connection failed ({format_error(exc)}); searching again..."
+                    )
+                    await asyncio.sleep(RECONNECT_DELAY_S)
         yield hub
 
 
@@ -105,11 +117,16 @@ async def star_point_main(upload_program: bool = False) -> None:
     program = "pybricks_hub/main.py" if upload_program else None
 
     with ButtonMenu() as buttons:
-        async with connected_hub(buttons, program) as hub:
-            print("Hub connected.")
-            async with buttons.blinking(1):
-                await calibrate_motors(hub)
-            await run_selection_loop(hub, buttons)
+        while True:
+            try:
+                async with connected_hub(buttons, program) as hub:
+                    print("Hub connected.")
+                    async with buttons.blinking(1):
+                        await calibrate_motors(hub)
+                    await run_selection_loop(hub, buttons)
+            except RECOVERABLE_ERRORS as exc:
+                print(f"Hub lost ({format_error(exc)}); searching again...")
+                await asyncio.sleep(RECONNECT_DELAY_S)
 
 
 if __name__ == "__main__":
