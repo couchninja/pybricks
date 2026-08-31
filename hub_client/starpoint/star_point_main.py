@@ -3,11 +3,9 @@ import asyncio
 from pybricks.parameters import Port
 
 from hub_client import MoveHub, Motor
+from hub_client.starpoint.buttons import ButtonData, StarpointButtons
 from simulate.astronomy.constants import ObserverMotionMode
 from simulate.astronomy.utils.ephemeris import current_time, observer_surface_vector_and_euler_angles_for_mode
-
-
-
 
 def clamp_yaw(yaw: float) -> float:
     return min(yaw % 360, 340)
@@ -33,6 +31,7 @@ async def calibrate_motors(hub: MoveHub) -> None:
     await motorTilt.reset_angle(-90)
 
 async def point_at_mode(hub: MoveHub, mode: ObserverMotionMode) -> None:
+    print(f"Pointing at mode: {mode.label}")
     motorPan = hub.motor(Port.B)
     motorTilt = hub.motor(Port.C)
     
@@ -64,14 +63,18 @@ async def star_point_main(upload_program: bool = False) -> None:
         print("Hub responded to ping.")
 
         await calibrate_motors(hub)
-        await point_at_mode(hub, ObserverMotionMode.EARTH_ROTATION)
-        await asyncio.sleep(3)
-        await point_at_mode(hub, ObserverMotionMode.SUN_ORBIT)
-        await asyncio.sleep(3)
-        await point_at_mode(hub, ObserverMotionMode.MILKY_WAY_ORBIT)
-        await asyncio.sleep(3)
-        await point_at_mode(hub, ObserverMotionMode.CMB_DIPOLE)
-        await asyncio.sleep(3)
+
+        buttons = StarpointButtons()
+
+        async def on_mode_selected(button: ButtonData) -> None:
+            print(f"Mode: {button['mode'].label}")
+            await point_at_mode(hub, button["mode"])
+
+        buttons.on_selection_changed(on_mode_selected)
+        buttons_task = asyncio.create_task(buttons.run())
+
+        await point_at_mode(hub, buttons.selected_button["mode"])
+        await buttons_task
 
 
 if __name__ == "__main__":
