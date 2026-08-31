@@ -167,8 +167,10 @@ def ecliptic_to_observer_surface(vector: np.ndarray, time: Time) -> np.ndarray:
 def observer_surface_euler_angles(surface_vector: np.ndarray) -> np.ndarray:
     """Euler angles (yaw, pitch, roll) in radians for a surface-frame direction.
 
-    yaw — heading from north toward east (0 = north, π/2 = east)
-    pitch — elevation above the horizon (0 = horizon, π/2 = zenith)
+    yaw — heading from north toward east (0 = north, π/2 = east, ±π = south);
+          range (-π, π]
+    pitch — elevation relative to the horizon (0 = horizon, π/2 = zenith,
+            -π/2 = nadir); range [-π/2, π/2]
     roll — always 0 (a direction does not determine roll)
     """
     north, east, up = surface_vector
@@ -224,8 +226,10 @@ def observer_surface_vector_and_euler_angles_for_mode(
         x — north, y — east, z — up (local zenith).
     euler_angles
       ``[yaw, pitch, roll]`` in degrees derived from ``surface_vector``:
-        yaw — heading from north toward east (0 = north, 90 = east)
-        pitch — elevation above the horizon (0 = horizon, 90 = zenith)
+        yaw — heading from north toward east (0 = north, 90 = east, ±180 = south);
+              range (-180, 180]
+        pitch — elevation relative to the horizon (0 = horizon, 90 = zenith,
+                -90 = nadir); range [-90, 90]
         roll — always 0 (a direction does not determine roll)
     speed
       Speed of the ecliptic velocity vector in AU/s.
