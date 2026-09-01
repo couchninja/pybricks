@@ -37,6 +37,7 @@ except ValueError:
 # Netherlands
 OBSERVER_LAT = 52.1326 * u.deg
 OBSERVER_LON = 5.2913 * u.deg
+_BODY_POINTING_TARGETS = frozenset({PointingTarget.SUN, PointingTarget.MOON})
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
@@ -95,6 +96,12 @@ def earth_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
     earth = get_body_barycentric("earth", time)
     sun = get_body_barycentric("sun", time)
     return _heliocentric_ecliptic_au(earth, sun)
+
+
+def moon_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
+    moon = get_body_barycentric("moon", time)
+    sun = get_body_barycentric("sun", time)
+    return _heliocentric_ecliptic_au(moon, sun)
 
 
 def sun_galactocentric_kpc(time: Time) -> np.ndarray:
@@ -211,16 +218,18 @@ def current_time() -> Time:
 
 
 def sun_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
-    earth_position = earth_heliocentric_ecliptic_au(time)
-    observer_dir = observer_direction_ecliptic(time)
-    observer_position = earth_position + observer_dir * EARTH_RADIUS_AU
-    direction = -observer_position
-    return direction / np.linalg.norm(direction)
+    return _body_direction_ecliptic_from_observer(np.zeros(3, dtype=float), time)
+
+
+def moon_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
+    return _body_direction_ecliptic_from_observer(moon_heliocentric_ecliptic_au(time), time)
 
 
 def observer_direction_ecliptic_for_target(time: Time, target: PointingTarget) -> np.ndarray | None:
     if target == PointingTarget.SUN:
         return sun_direction_ecliptic_from_observer(time)
+    if target == PointingTarget.MOON:
+        return moon_direction_ecliptic_from_observer(time)
     velocity = observer_velocity_ecliptic_au_per_s(time, target)
     speed = float(np.linalg.norm(velocity))
     if speed == 0.0:
@@ -233,10 +242,10 @@ def observer_surface_vector_and_euler_angles_for_target(
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Surface-frame direction and heading for a pointing target.
 
-    Uses ``observer_direction_ecliptic_for_target`` (sun direction for
-    ``PointingTarget.SUN``, otherwise normalized ecliptic velocity) and expresses
-    that direction in the observer's local surface frame (see
-    ``ecliptic_to_observer_surface``).
+    Uses ``observer_direction_ecliptic_for_target`` (body direction for
+    ``PointingTarget.SUN`` and ``PointingTarget.MOON``, otherwise normalized
+    ecliptic velocity) and expresses that direction in the observer's local
+    surface frame (see ``ecliptic_to_observer_surface``).
 
     Returns ``(surface_vector, euler_angles, speed)``:
 
@@ -251,7 +260,8 @@ def observer_surface_vector_and_euler_angles_for_target(
                 -90 = nadir); range [-90, 90]
         roll — always 0 (a direction does not determine roll)
     speed
-      Speed of the ecliptic velocity vector in AU/s (0 for ``PointingTarget.SUN``).
+      Speed of the ecliptic velocity vector in AU/s (0 for body targets
+      ``PointingTarget.SUN`` and ``PointingTarget.MOON``).
 
     When no direction is defined, ``surface_vector`` and ``euler_angles`` are both zero.
     """
@@ -260,7 +270,7 @@ def observer_surface_vector_and_euler_angles_for_target(
         return np.zeros(3, dtype=float), np.zeros(3, dtype=float), 0.0
     surface_vector = ecliptic_to_observer_surface(direction, time)
     euler_angles = np.degrees(observer_surface_euler_angles(surface_vector))
-    if pointing_target == PointingTarget.SUN:
+    if pointing_target in _BODY_POINTING_TARGETS:
         speed = 0.0
     else:
         speed = float(np.linalg.norm(observer_velocity_ecliptic_au_per_s(time, pointing_target)))
@@ -290,6 +300,14 @@ def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> n
     if target == PointingTarget.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
+
+
+def _body_direction_ecliptic_from_observer(body_heliocentric_au: np.ndarray, time: Time) -> np.ndarray:
+    earth_position = earth_heliocentric_ecliptic_au(time)
+    observer_dir = observer_direction_ecliptic(time)
+    observer_position = earth_position + observer_dir * EARTH_RADIUS_AU
+    direction = body_heliocentric_au - observer_position
+    return direction / np.linalg.norm(direction)
 
 
 def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepresentation) -> np.ndarray:

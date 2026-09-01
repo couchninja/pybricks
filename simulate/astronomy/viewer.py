@@ -121,6 +121,7 @@ class _BodyScreenLabel(NamedTuple):
 _BODY_SCREEN_LABELS = (
     _BodyScreenLabel("sun", "Sun", (255, 210, 60, 255)),
     _BodyScreenLabel("earth", "Earth", (255, 255, 255, 255)),
+    _BodyScreenLabel("moon", "Moon", (210, 210, 205, 255)),
     _BodyScreenLabel("galactic_center", "Milky Way center", (240, 200, 255, 255)),
 )
 

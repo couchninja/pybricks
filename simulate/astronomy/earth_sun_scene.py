@@ -5,14 +5,14 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, observer, earth_orbit, year_boundaries, earth_axis
+          sun, earth, moon, observer, earth_orbit, year_boundaries, earth_axis
         galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
 
 1. Coordinate frames (physical nesting). ``milky_way`` holds galactic geometry and
    parents ``solar_system``, which uses heliocentric ecliptic coords (Sun at the
-   origin, Earth and its orbit underneath). The edge ``milky_way -> solar_system``
+   origin, Earth, Moon, and Earth's orbit underneath). The edge ``milky_way -> solar_system``
    carries the ecliptic-to-galactic rotation and the Sun's galactocentric position.
 
 2. Display recentering. ``earth_center`` translates the entire subtree by
@@ -55,6 +55,8 @@ from simulate.astronomy.constants import (
     GALACTIC_ORBIT_DISTANCE_SCALE,
     KPC_TO_AU,
     MILKY_WAY_FRAME,
+    MOON_COLOR,
+    MOON_RADIUS_AU,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_COLOR,
@@ -83,6 +85,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
+    moon_heliocentric_ecliptic_au,
     observer_direction_ecliptic,
     observer_direction_ecliptic_for_target,
     observer_surface_vector_and_euler_angles_for_target,
@@ -103,6 +106,7 @@ class EarthSunAnimationState(TypedDict):
 
 class EarthSunState(TypedDict):
     earth_position: np.ndarray
+    moon_position: np.ndarray
     earth_rotation: np.ndarray
     spin_axis: np.ndarray
     observer_position: np.ndarray
@@ -135,6 +139,16 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         create_earth(EARTH_RADIUS_AU),
         geom_name="earth",
         node_name="earth",
+        parent_node_name=SOLAR_SYSTEM_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            trimesh.creation.icosphere(radius=MOON_RADIUS_AU, subdivisions=3),
+            MOON_COLOR,
+        ),
+        geom_name="moon",
+        node_name="moon",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
@@ -218,6 +232,11 @@ def update_earth_sun_scene(
         "earth",
         SOLAR_SYSTEM_FRAME,
         matrix=_transform_matrix(state["earth_rotation"], state["earth_position"]),
+    )
+    scene.graph.update(
+        "moon",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_transform_matrix(np.eye(3), state["moon_position"]),
     )
     scene.graph.update(
         "observer",
@@ -323,6 +342,7 @@ def _earth_sun_state(time: Time) -> EarthSunState:
 
     return {
         "earth_position": earth_position,
+        "moon_position": moon_heliocentric_ecliptic_au(time),
         "earth_rotation": earth_orientation_matrix(time),
         "spin_axis": spin_axis,
         "observer_position": earth_position + observer_dir * EARTH_RADIUS_AU,
