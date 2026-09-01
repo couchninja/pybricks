@@ -46,7 +46,7 @@ async def calibrate_motors(hub: MoveHub) -> None:
     # duty_limit 50 for non-geared base
     pan_angle = await motor_pan.run_until_stalled(-150, duty_limit=PAN_DUTY_LIMIT)
     print(f"Pan motor stalled at angle {pan_angle} degrees.")
-    await motor_pan.reset_angle(0)
+    await motor_pan.reset_angle(10)
     clear_last_target(motor_pan)
     await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, 180, "Pan")
 
