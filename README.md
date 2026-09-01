@@ -50,6 +50,29 @@ pixi install
 
 Bluetooth must be enabled on this machine. On Linux, your user needs permission to use Bluetooth (usually automatic on desktop distros).
 
+### Autostart navigator on boot
+
+Install and enable the systemd unit (starts after Bluetooth on reboot):
+
+```sh
+pixi run navigator-autostart
+```
+
+Disable and stop (no longer starts on boot):
+
+```sh
+pixi run navigator-autostart-off
+```
+
+Output appends to `logs/navigator.log`. Manage with:
+
+```sh
+pixi run navigator-start
+pixi run navigator-stop
+pixi run navigator-status
+pixi run navigator-logs
+```
+
 ## Deploy the hub program
 
 Find your hub:
