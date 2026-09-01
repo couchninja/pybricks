@@ -8,7 +8,7 @@ from pybricks_client import MoveHub
 async def motion_range(upload_program: bool = False) -> None:
     print("Motion range main")
 
-    async with MoveHub.connect(program="pybricks_hub/main.py" if upload_program else None) as hub:
+    async with MoveHub.connect(program="pybricks_hub/thin_ble_hub.py" if upload_program else None) as hub:
         await hub.ping()
         print("Hub responded to ping.")
 
