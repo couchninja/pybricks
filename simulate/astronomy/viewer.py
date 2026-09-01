@@ -39,13 +39,13 @@ from simulate.astronomy.constants import (
     LABEL_OFFSET_BODY_RADII,
     LINE_WIDTH_PIXELS,
     MAX_DEPTH_RATIO,
-    OBSERVER_FRAME_BUTTON_HEIGHT,
-    OBSERVER_FRAME_BUTTON_MARGIN,
-    OBSERVER_FRAME_BUTTON_WIDTH,
     OPENGL_Z_NEAR_MIN_AU,
+    POINTING_TARGET_BUTTON_HEIGHT,
+    POINTING_TARGET_BUTTON_MARGIN,
+    POINTING_TARGET_BUTTON_WIDTH,
     ROOT_FRAME,
     TRACKBALL_SCALE_AU,
-    ObserverFrame,
+    PointingTarget,
 )
 from simulate.astronomy.earth_sun_scene import (
     EarthSunAnimationState,
@@ -90,7 +90,7 @@ def show_earth_sun(
         wall_start=None,
         current_time=time,
     )
-    scene.metadata["observer_frame"] = ObserverFrame.EARTH_ROTATION
+    scene.metadata["pointing_target"] = PointingTarget.EARTH_ROTATION
     # Orbit paths are GL_LINES; see module docstring for why offset_lines must be False.
     scene.show(
         viewer=EarthCenteredViewer,
@@ -106,7 +106,7 @@ def show_earth_sun(
 class _EarthCenteredViewerState(TypedDict):
     screen_labels: list[text.Label]
     fps_label: text.Label
-    observer_frame_label: text.Label
+    pointing_target_label: text.Label
     fps_frames: int
     fps_interval_start: float
     fps_display: float
@@ -153,8 +153,8 @@ class EarthCenteredViewer(SceneViewer):
                 anchor_x="left",
                 anchor_y="top",
             ),
-            "observer_frame_label": text.Label(
-                ObserverFrame.EARTH_ROTATION.label,
+            "pointing_target_label": text.Label(
+                PointingTarget.EARTH_ROTATION.label,
                 font_size=LABEL_FONT_SIZE,
                 color=(80, 220, 255, 255),
                 anchor_x="center",
@@ -192,8 +192,8 @@ class EarthCenteredViewer(SceneViewer):
 
     @override
     def on_mouse_press(self, x: int, y: int, buttons: int, modifiers: int) -> None:
-        if buttons == pyglet.window.mouse.LEFT and self._observer_frame_button_contains(x, y):
-            self._cycle_observer_frame()
+        if buttons == pyglet.window.mouse.LEFT and self._pointing_target_button_contains(x, y):
+            self._cycle_pointing_target()
             return
         super().on_mouse_press(x, y, buttons, modifiers)
 
@@ -308,7 +308,7 @@ class EarthCenteredViewer(SceneViewer):
         fps_label.x = FPS_LABEL_MARGIN
         fps_label.y = height - FPS_LABEL_MARGIN
         fps_label.draw()
-        self._draw_observer_frame_button(width, height)
+        self._draw_pointing_target_button(width, height)
         gl.glDisable(gl.GL_BLEND)
 
         gl.glPopMatrix()
@@ -317,10 +317,10 @@ class EarthCenteredViewer(SceneViewer):
         gl.glMatrixMode(gl.GL_MODELVIEW)
         gl.glEnable(gl.GL_DEPTH_TEST)
 
-    def _observer_frame_button_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
-        left = width - OBSERVER_FRAME_BUTTON_MARGIN - OBSERVER_FRAME_BUTTON_WIDTH
-        bottom = OBSERVER_FRAME_BUTTON_MARGIN
-        return left, bottom, left + OBSERVER_FRAME_BUTTON_WIDTH, bottom + OBSERVER_FRAME_BUTTON_HEIGHT
+    def _pointing_target_button_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
+        left = width - POINTING_TARGET_BUTTON_MARGIN - POINTING_TARGET_BUTTON_WIDTH
+        bottom = POINTING_TARGET_BUTTON_MARGIN
+        return left, bottom, left + POINTING_TARGET_BUTTON_WIDTH, bottom + POINTING_TARGET_BUTTON_HEIGHT
 
     def _window_to_viewport(self, x: int, y: int) -> tuple[float, float]:
         window_width, window_height = self.get_size()
@@ -332,14 +332,14 @@ class EarthCenteredViewer(SceneViewer):
             y * viewport_height / window_height,
         )
 
-    def _observer_frame_button_contains(self, x: int, y: int) -> bool:
+    def _pointing_target_button_contains(self, x: int, y: int) -> bool:
         viewport_x, viewport_y = self._window_to_viewport(x, y)
         width, height = self.get_viewport_size()
-        left, bottom, right, top = self._observer_frame_button_bounds(width, height)
+        left, bottom, right, top = self._pointing_target_button_bounds(width, height)
         return left <= viewport_x <= right and bottom <= viewport_y <= top
 
-    def _draw_observer_frame_button(self, width: int, height: int) -> None:
-        left, bottom, right, top = self._observer_frame_button_bounds(width, height)
+    def _draw_pointing_target_button(self, width: int, height: int) -> None:
+        left, bottom, right, top = self._pointing_target_button_bounds(width, height)
         pyglet.graphics.draw(
             4,
             gl.GL_QUADS,
@@ -376,18 +376,18 @@ class EarthCenteredViewer(SceneViewer):
             ),
             ("c4B", (80, 220, 255, 255) * 4),
         )
-        observer_frame = self.scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
-        label = self._state["observer_frame_label"]
-        label.text = observer_frame.label
+        pointing_target = self.scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
+        label = self._state["pointing_target_label"]
+        label.text = pointing_target.label
         label.x = (left + right) // 2
         label.y = (bottom + top) // 2
         label.draw()
 
-    def _cycle_observer_frame(self) -> None:
-        frames = list(ObserverFrame)
-        current_frame = self.scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
-        next_frame = frames[(frames.index(current_frame) + 1) % len(frames)]
-        self.scene.metadata["observer_frame"] = next_frame
+    def _cycle_pointing_target(self) -> None:
+        targets = list(PointingTarget)
+        current_target = self.scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
+        next_target = targets[(targets.index(current_target) + 1) % len(targets)]
+        self.scene.metadata["pointing_target"] = next_target
         self.scene._redraw()
 
 

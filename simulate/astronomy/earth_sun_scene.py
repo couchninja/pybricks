@@ -70,7 +70,7 @@ from simulate.astronomy.constants import (
     SUN_COLOR,
     SUN_RADIUS_AU,
     YEAR_BOUNDARY_COLOR,
-    ObserverFrame,
+    PointingTarget,
 )
 from simulate.astronomy.utils.camera import camera_distance_au, camera_distance_to_point_au
 from simulate.astronomy.utils.earth_mesh import create_earth
@@ -84,8 +84,8 @@ from simulate.astronomy.utils.ephemeris import (
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
     observer_direction_ecliptic,
-    observer_surface_vector_and_euler_angles_for_frame,
-    observer_velocity_ecliptic_au_per_s,
+    observer_direction_ecliptic_for_target,
+    observer_surface_vector_and_euler_angles_for_target,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
@@ -224,14 +224,14 @@ def update_earth_sun_scene(
         SOLAR_SYSTEM_FRAME,
         matrix=_transform_matrix(np.eye(3), state["observer_position"]),
     )
-    observer_frame = scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
+    pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
     scene.graph.update(
         "observer_velocity_arrow",
         SOLAR_SYSTEM_FRAME,
         matrix=_observer_velocity_arrow_transform(
             state["observer_position"],
             time,
-            observer_frame,
+            pointing_target,
             camera_distance_au,
         ),
     )
@@ -292,10 +292,10 @@ def earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 
 
 def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
-    observer_frame = scene.metadata.get("observer_frame", ObserverFrame.EARTH_ROTATION)
-    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_frame(time, observer_frame)
+    pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
+    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_target(time, pointing_target)
     print(  # noqa: T201
-        f"{observer_frame}: "
+        f"{pointing_target}: "
         f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
         f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg"
     )
@@ -394,15 +394,13 @@ def _direction_arrow_transform(
 def _observer_velocity_arrow_transform(
     observer_position: np.ndarray,
     time: Time,
-    observer_frame: ObserverFrame,
+    pointing_target: PointingTarget,
     camera_distance_au: float,
 ) -> np.ndarray:
-    velocity = observer_velocity_ecliptic_au_per_s(time, observer_frame)
-    speed = float(np.linalg.norm(velocity))
-    if speed == 0.0:
+    direction = observer_direction_ecliptic_for_target(time, pointing_target)
+    if direction is None:
         return _transform_matrix(np.eye(3), observer_position)
 
-    direction = velocity / speed
     return _direction_arrow_transform(observer_position, direction, camera_distance_au)
 
 

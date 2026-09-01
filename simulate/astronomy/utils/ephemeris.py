@@ -23,7 +23,7 @@ from simulate.astronomy.constants import (
     KPC_TO_AU,
     SIDEREAL_DAY,
     SOLAR_GALACTIC_ORBITAL_SPEED,
-    ObserverFrame,
+    PointingTarget,
 )
 
 # Keep Astropy's default IERS auto-download when online. Offline (or when the
@@ -210,19 +210,38 @@ def current_time() -> Time:
     return Time.now()
 
 
-def observer_surface_vector_and_euler_angles_for_frame(
-    time: Time, observer_frame: ObserverFrame
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Surface-frame velocity direction and heading for an observer frame.
+def sun_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
+    earth_position = earth_heliocentric_ecliptic_au(time)
+    observer_dir = observer_direction_ecliptic(time)
+    observer_position = earth_position + observer_dir * EARTH_RADIUS_AU
+    direction = -observer_position
+    return direction / np.linalg.norm(direction)
 
-    Uses the ecliptic velocity from ``observer_velocity_ecliptic_au_per_s`` for
-    ``observer_frame``, normalizes it to a unit direction, and expresses that direction
-    in the observer's local surface frame (see ``ecliptic_to_observer_surface``).
+
+def observer_direction_ecliptic_for_target(time: Time, target: PointingTarget) -> np.ndarray | None:
+    if target == PointingTarget.SUN:
+        return sun_direction_ecliptic_from_observer(time)
+    velocity = observer_velocity_ecliptic_au_per_s(time, target)
+    speed = float(np.linalg.norm(velocity))
+    if speed == 0.0:
+        return None
+    return velocity / speed
+
+
+def observer_surface_vector_and_euler_angles_for_target(
+    time: Time, pointing_target: PointingTarget
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Surface-frame direction and heading for a pointing target.
+
+    Uses ``observer_direction_ecliptic_for_target`` (sun direction for
+    ``PointingTarget.SUN``, otherwise normalized ecliptic velocity) and expresses
+    that direction in the observer's local surface frame (see
+    ``ecliptic_to_observer_surface``).
 
     Returns ``(surface_vector, euler_angles, speed)``:
 
     surface_vector
-      Components of the velocity direction in the surface frame:
+      Components of the direction in the surface frame:
         x — north, y — east, z — up (local zenith).
     euler_angles
       ``[yaw, pitch, roll]`` in degrees derived from ``surface_vector``:
@@ -232,40 +251,43 @@ def observer_surface_vector_and_euler_angles_for_frame(
                 -90 = nadir); range [-90, 90]
         roll — always 0 (a direction does not determine roll)
     speed
-      Speed of the ecliptic velocity vector in AU/s.
+      Speed of the ecliptic velocity vector in AU/s (0 for ``PointingTarget.SUN``).
 
-    When speed is zero, ``surface_vector`` and ``euler_angles`` are both zero.
+    When no direction is defined, ``surface_vector`` and ``euler_angles`` are both zero.
     """
-    velocity = observer_velocity_ecliptic_au_per_s(time, observer_frame)
-    speed = float(np.linalg.norm(velocity))
-    if speed == 0.0:
-        return np.zeros(3, dtype=float), np.zeros(3, dtype=float), speed
-    surface_vector = ecliptic_to_observer_surface(velocity / speed, time)
+    direction = observer_direction_ecliptic_for_target(time, pointing_target)
+    if direction is None:
+        return np.zeros(3, dtype=float), np.zeros(3, dtype=float), 0.0
+    surface_vector = ecliptic_to_observer_surface(direction, time)
     euler_angles = np.degrees(observer_surface_euler_angles(surface_vector))
+    if pointing_target == PointingTarget.SUN:
+        speed = 0.0
+    else:
+        speed = float(np.linalg.norm(observer_velocity_ecliptic_au_per_s(time, pointing_target)))
     return surface_vector, euler_angles, speed
 
 
-def observer_velocity_ecliptic_au_per_s(time: Time, frame: ObserverFrame) -> np.ndarray:
-    if frame not in ObserverFrame:
-        raise ValueError(f"unknown observer frame: {frame}")
+def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> np.ndarray:
+    if target not in PointingTarget:
+        raise ValueError(f"unknown pointing target: {target}")
 
     velocity = np.zeros(3, dtype=float)
-    if frame in (
-        ObserverFrame.EARTH_ROTATION,
-        ObserverFrame.SUN_ORBIT,
-        ObserverFrame.MILKY_WAY_ORBIT,
-        ObserverFrame.CMB_DIPOLE,
+    if target in (
+        PointingTarget.EARTH_ROTATION,
+        PointingTarget.SUN_ORBIT,
+        PointingTarget.MILKY_WAY_ORBIT,
+        PointingTarget.CMB_DIPOLE,
     ):
         velocity += _earth_rotation_velocity_ecliptic_au_per_s(time)
-    if frame in (
-        ObserverFrame.SUN_ORBIT,
-        ObserverFrame.MILKY_WAY_ORBIT,
-        ObserverFrame.CMB_DIPOLE,
+    if target in (
+        PointingTarget.SUN_ORBIT,
+        PointingTarget.MILKY_WAY_ORBIT,
+        PointingTarget.CMB_DIPOLE,
     ):
         velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
-    if frame in (ObserverFrame.MILKY_WAY_ORBIT, ObserverFrame.CMB_DIPOLE):
+    if target in (PointingTarget.MILKY_WAY_ORBIT, PointingTarget.CMB_DIPOLE):
         velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
-    if frame == ObserverFrame.CMB_DIPOLE:
+    if target == PointingTarget.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
 

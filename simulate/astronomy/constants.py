@@ -63,26 +63,28 @@ CMB_DIPOLE_L = 264.021 * u.deg
 CMB_DIPOLE_B = 48.253 * u.deg
 
 
-class ObserverFrame(StrEnum):
+class PointingTarget(StrEnum):
     EARTH_ROTATION = "earth_rotation"
     SUN_ORBIT = "sun_orbit"
     MILKY_WAY_ORBIT = "milky_way_orbit"
     CMB_DIPOLE = "cmb_dipole"
+    SUN = "sun"
 
     @property
     def label(self) -> str:
-        return _OBSERVER_FRAME_LABELS[self]
+        return _POINTING_TARGET_LABELS[self]
 
 
-_OBSERVER_FRAME_LABELS = {
-    ObserverFrame.EARTH_ROTATION: "Earth rotation",
-    ObserverFrame.SUN_ORBIT: "Sun orbit",
-    ObserverFrame.MILKY_WAY_ORBIT: "Milky Way orbit",
-    ObserverFrame.CMB_DIPOLE: "CMB dipole",
+_POINTING_TARGET_LABELS = {
+    PointingTarget.EARTH_ROTATION: "Earth rotation",
+    PointingTarget.SUN_ORBIT: "Sun orbit",
+    PointingTarget.MILKY_WAY_ORBIT: "Milky Way orbit",
+    PointingTarget.CMB_DIPOLE: "CMB dipole",
+    PointingTarget.SUN: "Sun",
 }
-OBSERVER_FRAME_BUTTON_MARGIN = 8
-OBSERVER_FRAME_BUTTON_WIDTH = 200
-OBSERVER_FRAME_BUTTON_HEIGHT = 32
+POINTING_TARGET_BUTTON_MARGIN = 8
+POINTING_TARGET_BUTTON_WIDTH = 200
+POINTING_TARGET_BUTTON_HEIGHT = 32
 GALACTIC_ORBIT_COLOR = [120, 80, 180, 255]
 GALACTIC_AXIS_COLOR = [180, 120, 255, 255]
 GALACTIC_CENTER_COLOR = [240, 200, 255, 255]

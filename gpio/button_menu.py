@@ -10,7 +10,7 @@ import gpiod
 from gpiod.line import Bias, Direction, Edge, Value
 from pybricks.parameters import Color
 
-from simulate.astronomy.constants import ObserverFrame
+from simulate.astronomy.constants import PointingTarget
 
 CHIP = "/dev/gpiochip0"
 DEBOUNCE_S = 0.03
@@ -20,7 +20,7 @@ BLINK_PERIOD_S = 0.4
 class ButtonData(TypedDict):
     button_pin: int
     led_pin: int
-    frame: ObserverFrame
+    target: PointingTarget
     color: Color
 
 
@@ -31,31 +31,31 @@ BUTTONS: tuple[ButtonData, ...] = (
     {
         "button_pin": 27,
         "led_pin": 17,
-        "frame": ObserverFrame.EARTH_ROTATION,
+        "target": PointingTarget.EARTH_ROTATION,
         "color": Color.BLUE,
     },
     {
         "button_pin": 22,
         "led_pin": 23,
-        "frame": ObserverFrame.SUN_ORBIT,
+        "target": PointingTarget.SUN_ORBIT,
         "color": Color.RED,
     },
     {
         "button_pin": 24,
         "led_pin": 25,
-        "frame": ObserverFrame.MILKY_WAY_ORBIT,
+        "target": PointingTarget.MILKY_WAY_ORBIT,
         "color": Color.GREEN,
     },
     {
         "button_pin": 5,
         "led_pin": 6,
-        "frame": ObserverFrame.CMB_DIPOLE,
+        "target": PointingTarget.CMB_DIPOLE,
         "color": Color.RED,
     },
     {
         "button_pin": 12,
         "led_pin": 16,
-        "frame": ObserverFrame.CMB_DIPOLE,
+        "target": PointingTarget.SUN,
         "color": Color.WHITE,
     },
 )
@@ -72,9 +72,7 @@ class ButtonMenu:
         self._buttons = buttons
         self._chip = chip
         self._debounce_s = debounce_s
-        self._button_index_by_pin = {
-            button["button_pin"]: index for index, button in enumerate(buttons)
-        }
+        self._button_index_by_pin = {button["button_pin"]: index for index, button in enumerate(buttons)}
         self._selected_index = 0
         self._selection_listeners: list[ButtonListener] = []
         self._request: gpiod.LineRequest | None = None
@@ -132,9 +130,7 @@ class ButtonMenu:
 
         while True:
             request = self._require_request()
-            events = await asyncio.to_thread(
-                lambda: list(request.read_edge_events())
-            )
+            events = await asyncio.to_thread(lambda: list(request.read_edge_events()))
             if not events:
                 await asyncio.sleep(0.01)
                 continue
