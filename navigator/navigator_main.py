@@ -52,7 +52,7 @@ async def calibrate_motors(hub: MoveHub) -> None:
 
     tilt_angle = await motor_tilt.run_until_stalled(-100, duty_limit=TILT_DUTY_LIMIT)
     print(f"Tilt motor stalled at angle {tilt_angle:.1f} degrees.")
-    await motor_tilt.reset_angle(-90)
+    await motor_tilt.reset_angle(-85)
     clear_last_target(motor_tilt)
 
 
