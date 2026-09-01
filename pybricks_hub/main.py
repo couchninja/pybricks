@@ -23,23 +23,6 @@ SENSOR_PORTS = {
     "C": Port.C,
 }
 
-COLORS = {
-    "NONE": Color.NONE,
-    "BLACK": Color.BLACK,
-    "GRAY": Color.GRAY,
-    "WHITE": Color.WHITE,
-    "RED": Color.RED,
-    "ORANGE": Color.ORANGE,
-    "BROWN": Color.BROWN,
-    "YELLOW": Color.YELLOW,
-    "GREEN": Color.GREEN,
-    "CYAN": Color.CYAN,
-    "BLUE": Color.BLUE,
-    "VIOLET": Color.VIOLET,
-    "MAGENTA": Color.MAGENTA,
-}
-
-
 def parse_int(value):
     return int(value)
 
@@ -61,6 +44,10 @@ def parse_stop(value):
     return None
 
 
+def parse_color(name):
+    return getattr(Color, name)
+
+
 def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
     # Move Hub MicroPython can raise TypeError when list slices are passed as
     # function arguments after motors/sensors are initialized.
@@ -73,7 +60,7 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
             return
 
         if cmd == "light.on":
-            hub.light.on(COLORS[arg1])
+            hub.light.on(parse_color(arg1))
             reply(seq, "ok")
             return
 
@@ -162,7 +149,7 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
             elif action == "ambient":
                 reply(seq, "val " + str(sensor.ambient()))
             elif action == "light.on":
-                sensor.light.on(COLORS[arg2])
+                sensor.light.on(parse_color(arg2))
                 reply(seq, "ok")
             elif action == "light.off":
                 sensor.light.off()
@@ -172,7 +159,7 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
             return
 
         reply(seq, "err unknown command")
-    except KeyError:
+    except (KeyError, AttributeError):
         reply(seq, "err unknown port or color")
     except (IndexError, ValueError):
         reply(seq, "err bad arguments")

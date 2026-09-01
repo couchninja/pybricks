@@ -17,7 +17,9 @@ INACTIVITY_REFRESH_S = 10.0
 RECONNECT_DELAY_S = 2.0
 PAN_DUTY_LIMIT = 150
 TILT_DUTY_LIMIT = 200
-
+# Make sure this matches the ports in pybricks_hub/main.py and the script is on the brick
+EXTERNAL_MOTOR_PORT = Port.D
+SENSOR_PORT = Port.C
 
 def clamp_yaw(yaw: float) -> float:
     return min(yaw % 360, 340)
@@ -28,7 +30,7 @@ def clamp_pitch(pitch: float) -> float:
 
 
 def get_motors(hub: MoveHub) -> tuple[Motor, Motor]:
-    return hub.motor(Port.A), hub.motor(Port.D)
+    return hub.motor(Port.A), hub.motor(EXTERNAL_MOTOR_PORT)
 
 
 async def calibrate_motors(hub: MoveHub) -> None:
@@ -99,7 +101,7 @@ async def connected_hub(
 
 
 async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
-    sensor = hub.color_distance_sensor(Port.C)
+    sensor = hub.color_distance_sensor(SENSOR_PORT)
     activity = asyncio.Event()
     lock = asyncio.Lock()
 
@@ -152,5 +154,5 @@ async def navigator_main(upload_program: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    # asyncio.run(navigator_main(upload_program=True))
-    asyncio.run(navigator_main(upload_program=False))
+    asyncio.run(navigator_main(upload_program=True))
+    # asyncio.run(navigator_main(upload_program=False))
