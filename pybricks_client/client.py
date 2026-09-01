@@ -256,7 +256,7 @@ class MoveHub:
         cls,
         name: str | None = None,
         *,
-        program: str | None = "pybricks_hub/main.py",
+        program: str | None = "pybricks_hub/thin_ble_hub.py",
         retries: int = 5,
     ) -> AsyncIterator[MoveHub]:
         """Deploy over GATT; commands via stdin write, replies via stdout."""

@@ -98,7 +98,7 @@ pixi run hub-dev        # interactive mode: re-upload after edits without reconn
 Target a specific hub by name or address:
 
 ```sh
-pixi run python pybricks_client/ble_control.py -n "Move Hub" run pybricks_hub/main.py
+pixi run python pybricks_client/ble_control.py -n "Move Hub" run pybricks_hub/thin_ble_hub.py
 ```
 
 ## Run tests from this machine
@@ -136,7 +136,7 @@ asyncio.run(main())
 
 ## Hub wiring defaults
 
-`pybricks_hub/main.py` maps ports as follows (edit to match your setup):
+`pybricks_hub/thin_ble_hub.py` maps ports as follows (edit to match your setup):
 
 | Port | Device |
 |------|--------|

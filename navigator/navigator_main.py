@@ -17,9 +17,12 @@ INACTIVITY_REFRESH_S = 10.0
 RECONNECT_DELAY_S = 2.0
 PAN_DUTY_LIMIT = 150
 TILT_DUTY_LIMIT = 200
-# Make sure this matches the ports in pybricks_hub/main.py and the script is on the brick
+MIN_TARGET_ANGLE_DELTA = 2
+# Make sure this matches the ports in pybricks_hub/thin_ble_hub.py and the script is on the brick
 EXTERNAL_MOTOR_PORT = Port.D
 SENSOR_PORT = Port.C
+
+_last_target_angles: dict[str, float] = {}
 
 def clamp_yaw(yaw: float) -> float:
     return min(yaw % 360, 340)
@@ -33,23 +36,41 @@ def get_motors(hub: MoveHub) -> tuple[Motor, Motor]:
     return hub.motor(Port.A), hub.motor(EXTERNAL_MOTOR_PORT)
 
 
+def clear_last_target(motor: Motor) -> None:
+    _last_target_angles.pop(motor.port.name, None)
+
+
 async def calibrate_motors(hub: MoveHub) -> None:
     motor_pan, motor_tilt = get_motors(hub)
+    _last_target_angles.clear()
     # duty_limit 50 for non-geared base
     pan_angle = await motor_pan.run_until_stalled(-150, duty_limit=PAN_DUTY_LIMIT)
     print(f"Pan motor stalled at angle {pan_angle} degrees.")
     await motor_pan.reset_angle(0)
+    clear_last_target(motor_pan)
     await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, 180, "Pan")
 
     tilt_angle = await motor_tilt.run_until_stalled(-100, duty_limit=TILT_DUTY_LIMIT)
     print(f"Tilt motor stalled at angle {tilt_angle} degrees.")
     await motor_tilt.reset_angle(-90)
-
+    clear_last_target(motor_tilt)
 
 
 async def run_target_or_warn(
     motor: Motor, speed: float, target_angle: float, label: str
 ) -> None:
+    port_name = motor.port.name
+    last_target = _last_target_angles.get(port_name)
+    if (
+        last_target is not None
+        and abs(target_angle - last_target) < MIN_TARGET_ANGLE_DELTA
+    ):
+        print(
+            f"{label} motor: skipped (within {MIN_TARGET_ANGLE_DELTA}° of last target)"
+        )
+        return
+
+    _last_target_angles[port_name] = target_angle
     try:
         await motor.run_target(speed, target_angle=target_angle)
     except MotorStalledError:
@@ -58,6 +79,9 @@ async def run_target_or_warn(
             f"Warning: {label} motor stalled at {actual}° "
             f"(target {target_angle}°)"
         )
+        return
+
+    print(f"{label} motor: moving to {target_angle}°")
 
 
 async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
@@ -138,7 +162,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
 
 async def navigator_main(upload_program: bool = False) -> None:
     print("Navigator main")
-    program = "pybricks_hub/main.py" if upload_program else None
+    program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
 
     with ButtonMenu() as buttons:
         while True:
@@ -154,5 +178,5 @@ async def navigator_main(upload_program: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(navigator_main(upload_program=True))
-    # asyncio.run(navigator_main(upload_program=False))
+    # asyncio.run(navigator_main(upload_program=True))
+    asyncio.run(navigator_main(upload_program=False))
