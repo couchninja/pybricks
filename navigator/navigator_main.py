@@ -45,13 +45,13 @@ async def calibrate_motors(hub: MoveHub) -> None:
     _last_target_angles.clear()
     # duty_limit 50 for non-geared base
     pan_angle = await motor_pan.run_until_stalled(-150, duty_limit=PAN_DUTY_LIMIT)
-    print(f"Pan motor stalled at angle {pan_angle} degrees.")
+    print(f"Pan motor stalled at angle {pan_angle:.1f} degrees.")
     await motor_pan.reset_angle(10)
     clear_last_target(motor_pan)
     await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, 180, "Pan")
 
     tilt_angle = await motor_tilt.run_until_stalled(-100, duty_limit=TILT_DUTY_LIMIT)
-    print(f"Tilt motor stalled at angle {tilt_angle} degrees.")
+    print(f"Tilt motor stalled at angle {tilt_angle:.1f} degrees.")
     await motor_tilt.reset_angle(-90)
     clear_last_target(motor_tilt)
 
@@ -66,7 +66,7 @@ async def run_target_or_warn(
         and abs(target_angle - last_target) < MIN_TARGET_ANGLE_DELTA
     ):
         print(
-            f"{label} motor: skipped (within {MIN_TARGET_ANGLE_DELTA}° of last target)"
+            f"{label} motor: skipped (within {MIN_TARGET_ANGLE_DELTA:.1f}° of last target)"
         )
         return
 
@@ -76,12 +76,12 @@ async def run_target_or_warn(
     except MotorStalledError:
         actual = await motor.angle()
         print(
-            f"Warning: {label} motor stalled at {actual}° "
-            f"(target {target_angle}°)"
+            f"Warning: {label} motor stalled at {actual:.1f}° "
+            f"(target {target_angle:.1f}°)"
         )
         return
 
-    print(f"{label} motor: moving to {target_angle}°")
+    print(f"{label} motor: moving to {target_angle:.1f}°")
 
 
 async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
@@ -92,16 +92,16 @@ async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
         current_time(), target
     )
 
-    print(f"Raw yaw: {yaw} degrees. Pitch: {pitch} degrees.")
+    print(f"Raw yaw: {yaw:.1f} degrees. Pitch: {pitch:.1f} degrees.")
     yaw = clamp_yaw(yaw)
     pitch = clamp_pitch(pitch)
-    print(f"Clamped yaw: {yaw} degrees. Pitch: {pitch} degrees.")
+    print(f"Clamped yaw: {yaw:.1f} degrees. Pitch: {pitch:.1f} degrees.")
 
     await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, yaw, "Pan")
-    print(f"Pan motor angle: {await motor_pan.angle()} degrees.")
+    print(f"Pan motor angle: {(await motor_pan.angle()):.1f} degrees.")
 
     await run_target_or_warn(motor_tilt, TILT_DUTY_LIMIT, pitch, "Tilt")
-    print(f"Tilt motor angle: {await motor_tilt.angle()} degrees.")
+    print(f"Tilt motor angle: {(await motor_tilt.angle()):.1f} degrees.")
 
 
 @asynccontextmanager
