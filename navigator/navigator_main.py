@@ -5,7 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from pybricks.parameters import Port
 
 from gpio.button_menu import ButtonData, ButtonMenu
-from pybricks_client import Motor, MoveHub
+from pybricks_client import Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import ObserverFrame
 from simulate.astronomy.utils.ephemeris import (
@@ -15,6 +15,8 @@ from simulate.astronomy.utils.ephemeris import (
 
 INACTIVITY_REFRESH_S = 10.0
 RECONNECT_DELAY_S = 2.0
+PAN_DUTY_LIMIT = 150
+TILT_DUTY_LIMIT = 200
 
 
 def clamp_yaw(yaw: float) -> float:
@@ -26,20 +28,34 @@ def clamp_pitch(pitch: float) -> float:
 
 
 def get_motors(hub: MoveHub) -> tuple[Motor, Motor]:
-    return hub.motor(Port.B), hub.motor(Port.C)
+    return hub.motor(Port.A), hub.motor(Port.D)
 
 
 async def calibrate_motors(hub: MoveHub) -> None:
     motor_pan, motor_tilt = get_motors(hub)
     # duty_limit 50 for non-geared base
-    pan_angle = await motor_pan.run_until_stalled(-150, duty_limit=100)
-    tilt_angle = await motor_tilt.run_until_stalled(-100, duty_limit=50)
-
+    pan_angle = await motor_pan.run_until_stalled(-150, duty_limit=PAN_DUTY_LIMIT)
     print(f"Pan motor stalled at angle {pan_angle} degrees.")
-    print(f"Tilt motor stalled at angle {tilt_angle} degrees.")
+    await motor_pan.reset_angle(0)
+    await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, 180, "Pan")
 
-    await motor_pan.reset_angle(-10)
+    tilt_angle = await motor_tilt.run_until_stalled(-100, duty_limit=TILT_DUTY_LIMIT)
+    print(f"Tilt motor stalled at angle {tilt_angle} degrees.")
     await motor_tilt.reset_angle(-90)
+
+
+
+async def run_target_or_warn(
+    motor: Motor, speed: float, target_angle: float, label: str
+) -> None:
+    try:
+        await motor.run_target(speed, target_angle=target_angle)
+    except MotorStalledError:
+        actual = await motor.angle()
+        print(
+            f"Warning: {label} motor stalled at {actual}° "
+            f"(target {target_angle}°)"
+        )
 
 
 async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
@@ -55,10 +71,10 @@ async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
     pitch = clamp_pitch(pitch)
     print(f"Clamped yaw: {yaw} degrees. Pitch: {pitch} degrees.")
 
-    await motor_pan.run_target(150, target_angle=yaw)
+    await run_target_or_warn(motor_pan, PAN_DUTY_LIMIT, yaw, "Pan")
     print(f"Pan motor angle: {await motor_pan.angle()} degrees.")
 
-    await motor_tilt.run_target(200, target_angle=pitch)
+    await run_target_or_warn(motor_tilt, TILT_DUTY_LIMIT, pitch, "Tilt")
     print(f"Tilt motor angle: {await motor_tilt.angle()} degrees.")
 
 
@@ -83,7 +99,7 @@ async def connected_hub(
 
 
 async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
-    sensor = hub.color_distance_sensor(Port.D)
+    sensor = hub.color_distance_sensor(Port.C)
     activity = asyncio.Event()
     lock = asyncio.Lock()
 
@@ -136,4 +152,5 @@ async def navigator_main(upload_program: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    # asyncio.run(navigator_main(upload_program=True))
     asyncio.run(navigator_main(upload_program=False))

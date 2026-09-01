@@ -17,6 +17,10 @@ class HubClientError(RuntimeError):
     """Raised when the hub returns an error response."""
 
 
+class MotorStalledError(HubClientError):
+    """Raised when a measured motor move stalls before reaching its target."""
+
+
 def _color_name(color: Color) -> str:
     for name, known in Color.__dict__.items():
         if isinstance(known, Color) and color == known:
@@ -88,7 +92,10 @@ class _CommandSession:
         if line.startswith("color "):
             return getattr(Color, line[6:])
         if line.startswith("err "):
-            raise HubClientError(line[4:])
+            message = line[4:]
+            if message == "stalled":
+                raise MotorStalledError(message)
+            raise HubClientError(message)
         raise HubClientError(f"unexpected hub response: {line!r}")
 
 
