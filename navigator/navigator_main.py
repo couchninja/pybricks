@@ -7,10 +7,10 @@ from pybricks.parameters import Port
 from gpio.button_menu import ButtonData, ButtonMenu
 from pybricks_client import Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
-from simulate.astronomy.constants import ObserverFrame
+from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.utils.ephemeris import (
     current_time,
-    observer_surface_vector_and_euler_angles_for_frame,
+    observer_surface_vector_and_euler_angles_for_target,
 )
 
 INACTIVITY_REFRESH_S = 10.0
@@ -84,12 +84,12 @@ async def run_target_or_warn(
     print(f"{label} motor: moving to {target_angle}°")
 
 
-async def point_at_frame(hub: MoveHub, frame: ObserverFrame) -> None:
-    print(f"Pointing at frame: {frame.label}")
+async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
+    print(f"Pointing at target: {target.label}")
     motor_pan, motor_tilt = get_motors(hub)
 
-    _surface, (yaw, pitch, _roll), _speed = (
-        observer_surface_vector_and_euler_angles_for_frame(current_time(), frame)
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
+        current_time(), target
     )
 
     print(f"Raw yaw: {yaw} degrees. Pitch: {pitch} degrees.")
@@ -134,10 +134,10 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
             button = buttons.selected_button
             print(f"Button: {button}")
             await sensor.light.on(button["color"])
-            await point_at_frame(hub, button["frame"])
+            await point_at_target(hub, button["target"])
 
-    async def on_frame_selected(button: ButtonData) -> None:
-        print(f"Frame: {button['frame'].label}")
+    async def on_target_selected(button: ButtonData) -> None:
+        print(f"Target: {button['target'].label}")
         await point_selected()
         activity.set()
 
@@ -149,7 +149,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
             except TimeoutError:
                 await point_selected()
 
-    buttons.on_selection_changed(on_frame_selected)
+    buttons.on_selection_changed(on_target_selected)
     try:
         await point_selected()
         await asyncio.gather(buttons.run(), refresh_on_inactivity())
