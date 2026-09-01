@@ -16,11 +16,11 @@ from pybricks.tools import read_input_byte, wait
 MOTOR_PORTS = {
     "A": (Port.A, Direction.CLOCKWISE),
     "B": (Port.B, Direction.CLOCKWISE),
-    "C": (Port.C, Direction.COUNTERCLOCKWISE),
+    "D": (Port.D, Direction.COUNTERCLOCKWISE),
 }
 
 SENSOR_PORTS = {
-    "D": Port.D,
+    "C": Port.C,
 }
 
 COLORS = {
@@ -111,12 +111,18 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
                 speed = parse_int(arg2)
                 rotation_angle = parse_int(arg3)
                 then = parse_stop(arg4) or Stop.HOLD
-                motor.run_angle(speed, rotation_angle, then)
+                motor.run_angle(speed, rotation_angle, then, wait=False)
+                if not wait_for_move(motor):
+                    reply(seq, "err stalled")
+                    return
             elif action == "rtgt":
                 speed = parse_int(arg2)
                 target_angle = parse_int(arg3)
                 then = parse_stop(arg4) or Stop.HOLD
-                motor.run_target(speed, target_angle, then)
+                motor.run_target(speed, target_angle, then, wait=False)
+                if not wait_for_move(motor):
+                    reply(seq, "err stalled")
+                    return
             elif action == "stall":
                 speed = parse_int(arg2)
                 then = Stop.COAST
@@ -172,6 +178,15 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
         reply(seq, "err bad arguments")
     except Exception as exc:
         reply(seq, "err " + type(exc).__name__ + ":" + str(exc))
+
+
+def wait_for_move(motor):
+    while not motor.done():
+        if motor.stalled():
+            motor.stop()
+            return False
+        wait(10)
+    return True
 
 
 def read_line():
