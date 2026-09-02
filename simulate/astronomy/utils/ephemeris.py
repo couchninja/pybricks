@@ -21,6 +21,8 @@ from simulate.astronomy.constants import (
     CMB_DIPOLE_SPEED,
     EARTH_RADIUS_AU,
     KPC_TO_AU,
+    OBSERVER_LAT,
+    OBSERVER_LON,
     SIDEREAL_DAY,
     SOLAR_GALACTIC_ORBITAL_SPEED,
     PointingTarget,
@@ -34,12 +36,8 @@ try:
 except ValueError:
     iers_conf.auto_max_age = None
 
-# Netherlands
-OBSERVER_LAT = 52.1326 * u.deg
-OBSERVER_LON = 5.2913 * u.deg
-_BODY_POINTING_TARGETS = frozenset(
-    {PointingTarget.SUN, PointingTarget.MOON, PointingTarget.MILKY_WAY_CENTER}
-)
+
+_BODY_POINTING_TARGETS = frozenset({PointingTarget.SUN, PointingTarget.MOON, PointingTarget.MILKY_WAY_CENTER})
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
