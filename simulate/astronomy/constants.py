@@ -74,6 +74,7 @@ class PointingTarget(StrEnum):
     CMB_DIPOLE = "cmb_dipole"
     SUN = "sun"
     MOON = "moon"
+    MILKY_WAY_CENTER = "milky_way_center"
 
     @property
     def label(self) -> str:
@@ -87,6 +88,7 @@ _POINTING_TARGET_LABELS = {
     PointingTarget.CMB_DIPOLE: "CMB dipole",
     PointingTarget.SUN: "Sun",
     PointingTarget.MOON: "Moon",
+    PointingTarget.MILKY_WAY_CENTER: "Milky Way center",
 }
 POINTING_TARGET_BUTTON_MARGIN = 8
 POINTING_TARGET_BUTTON_WIDTH = 200
