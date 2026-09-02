@@ -131,12 +131,13 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
 
     async def point_selected() -> None:
         async with lock:
-            button = buttons.selected_button
-            print(f"Button: {button}")
-            await sensor.light.on(button["color"])
-            await point_at_target(hub, button["target"])
+            selected = buttons.selected_button
+            print(f"Button: {selected}")
+            await sensor.light.on(selected["color"])
+            await point_at_target(hub, selected["target"])
 
     async def on_target_selected(button: ButtonData) -> None:
+        activity.set()
         print(f"Target: {button['target'].label}")
         await point_selected()
         activity.set()
@@ -151,6 +152,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
 
     buttons.on_selection_changed(on_target_selected)
     try:
+        buttons.apply_entry_mode()
         await point_selected()
         await asyncio.gather(buttons.run(), refresh_on_inactivity())
     finally:

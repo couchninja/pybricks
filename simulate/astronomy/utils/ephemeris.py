@@ -37,7 +37,9 @@ except ValueError:
 # Netherlands
 OBSERVER_LAT = 52.1326 * u.deg
 OBSERVER_LON = 5.2913 * u.deg
-_BODY_POINTING_TARGETS = frozenset({PointingTarget.SUN, PointingTarget.MOON})
+_BODY_POINTING_TARGETS = frozenset(
+    {PointingTarget.SUN, PointingTarget.MOON, PointingTarget.MILKY_WAY_CENTER}
+)
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
@@ -225,11 +227,17 @@ def moon_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
     return _body_direction_ecliptic_from_observer(moon_heliocentric_ecliptic_au(time), time)
 
 
+def galactic_center_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
+    return _body_direction_ecliptic_from_observer(_galactic_center_heliocentric_ecliptic_au(time), time)
+
+
 def observer_direction_ecliptic_for_target(time: Time, target: PointingTarget) -> np.ndarray | None:
     if target == PointingTarget.SUN:
         return sun_direction_ecliptic_from_observer(time)
     if target == PointingTarget.MOON:
         return moon_direction_ecliptic_from_observer(time)
+    if target == PointingTarget.MILKY_WAY_CENTER:
+        return galactic_center_direction_ecliptic_from_observer(time)
     velocity = observer_velocity_ecliptic_au_per_s(time, target)
     speed = float(np.linalg.norm(velocity))
     if speed == 0.0:
@@ -242,10 +250,11 @@ def observer_surface_vector_and_euler_angles_for_target(
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Surface-frame direction and heading for a pointing target.
 
-    Uses ``observer_direction_ecliptic_for_target`` (body direction for
-    ``PointingTarget.SUN`` and ``PointingTarget.MOON``, otherwise normalized
-    ecliptic velocity) and expresses that direction in the observer's local
-    surface frame (see ``ecliptic_to_observer_surface``).
+    Uses ``observer_direction_ecliptic_for_target`` (body/sky direction for
+    ``PointingTarget.SUN``, ``PointingTarget.MOON``, and
+    ``PointingTarget.MILKY_WAY_CENTER``, otherwise normalized ecliptic velocity)
+    and expresses that direction in the observer's local surface frame (see
+    ``ecliptic_to_observer_surface``).
 
     Returns ``(surface_vector, euler_angles, speed)``:
 
@@ -260,8 +269,9 @@ def observer_surface_vector_and_euler_angles_for_target(
                 -90 = nadir); range [-90, 90]
         roll — always 0 (a direction does not determine roll)
     speed
-      Speed of the ecliptic velocity vector in AU/s (0 for body targets
-      ``PointingTarget.SUN`` and ``PointingTarget.MOON``).
+      Speed of the ecliptic velocity vector in AU/s (0 for body/sky targets
+      ``PointingTarget.SUN``, ``PointingTarget.MOON``, and
+      ``PointingTarget.MILKY_WAY_CENTER``).
 
     When no direction is defined, ``surface_vector`` and ``euler_angles`` are both zero.
     """
@@ -275,6 +285,15 @@ def observer_surface_vector_and_euler_angles_for_target(
     else:
         speed = float(np.linalg.norm(observer_velocity_ecliptic_au_per_s(time, pointing_target)))
     return surface_vector, euler_angles, speed
+
+
+def sun_or_moon_pointing_target(time: Time) -> PointingTarget:
+    _surface, (_yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
+        time, PointingTarget.SUN
+    )
+    if pitch > 0:
+        return PointingTarget.SUN
+    return PointingTarget.MOON
 
 
 def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> np.ndarray:
@@ -300,6 +319,12 @@ def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> n
     if target == PointingTarget.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
     return velocity
+
+
+def _galactic_center_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
+    sun_galactic = sun_galactocentric_kpc(time)
+    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
+    return galactic_rotation.T @ (-sun_galactic) * KPC_TO_AU
 
 
 def _body_direction_ecliptic_from_observer(body_heliocentric_au: np.ndarray, time: Time) -> np.ndarray:
