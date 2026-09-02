@@ -3,6 +3,14 @@ from enum import StrEnum
 import numpy as np
 from astropy import units as u
 
+# FF
+OBSERVER_LAT = 49.5 * u.deg
+OBSERVER_LON = 6.6 * u.deg
+
+# Netherlands
+# OBSERVER_LAT = 52.1326 * u.deg
+# OBSERVER_LON = 5.2913 * u.deg
+
 KPC_TO_AU = (1 * u.kpc).to_value(u.au)
 
 # ARON get this from the astropy constants?
