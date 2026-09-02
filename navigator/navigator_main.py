@@ -140,7 +140,6 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
         activity.set()
         print(f"Target: {button['target'].label}")
         await point_selected()
-        activity.set()
 
     async def refresh_on_inactivity() -> None:
         while True:
