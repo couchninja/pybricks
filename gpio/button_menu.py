@@ -31,32 +31,32 @@ BUTTONS: tuple[ButtonData, ...] = (
     {
         "button_pin": 27,
         "led_pin": 17,
-        "target": PointingTarget.EARTH_ROTATION,
-        "color": Color.BLUE,
+        "target": PointingTarget.SUN,
+        "color": Color.WHITE,
     },
     {
         "button_pin": 22,
         "led_pin": 23,
-        "target": PointingTarget.SUN_ORBIT,
-        "color": Color.RED,
+        "target": PointingTarget.EARTH_ROTATION,
+        "color": Color.BLUE,
     },
     {
         "button_pin": 24,
         "led_pin": 25,
-        "target": PointingTarget.MILKY_WAY_ORBIT,
-        "color": Color.GREEN,
+        "target": PointingTarget.SUN_ORBIT,
+        "color": Color.RED,
     },
     {
         "button_pin": 5,
         "led_pin": 6,
-        "target": PointingTarget.CMB_DIPOLE,
-        "color": Color.RED,
+        "target": PointingTarget.MILKY_WAY_ORBIT,
+        "color": Color.GREEN,
     },
     {
         "button_pin": 12,
         "led_pin": 16,
-        "target": PointingTarget.SUN,
-        "color": Color.WHITE,
+        "target": PointingTarget.CMB_DIPOLE,
+        "color": Color.RED,
     },
 )
 
