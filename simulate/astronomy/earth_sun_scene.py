@@ -313,10 +313,13 @@ def earth_sun_animation_callback(scene: trimesh.Scene) -> None:
 def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
     pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
     surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_target(time, pointing_target)
+    speed_km_s = speed * (1 * u.au).to_value(u.km)
+    speed_km_h = speed_km_s * 3600.0
     print(  # noqa: T201
         f"{pointing_target}: "
         f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
-        f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg"
+        f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg  "
+        f"speed {speed:.2f} AU/s, {speed_km_s:.4f} km/s, {speed_km_h:.2f} km/h"
     )
 
 
