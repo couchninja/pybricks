@@ -11,7 +11,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable navigator.service
 
 echo "navigator.service enabled (starts on boot)."
-echo "  start now:  pixi run navigator-start"
-echo "  stop:       pixi run navigator-stop"
-echo "  status:     pixi run navigator-status"
-echo "  logs:       pixi run navigator-logs"
+echo "  start now:  pixi run nav-service-start"
+echo "  stop:       pixi run nav-service-stop"
+echo "  status:     pixi run nav-service-status"
+echo "  logs:       pixi run nav-service-logs"

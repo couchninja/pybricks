@@ -55,22 +55,22 @@ Bluetooth must be enabled on this machine. On Linux, your user needs permission 
 Install and enable the systemd unit (starts after Bluetooth on reboot):
 
 ```sh
-pixi run navigator-autostart
+pixi run nav-service-autostart
 ```
 
 Disable and stop (no longer starts on boot):
 
 ```sh
-pixi run navigator-autostart-off
+pixi run nav-service-autostart-off
 ```
 
 Output appends to `logs/navigator.log`. Manage with:
 
 ```sh
-pixi run navigator-start
-pixi run navigator-stop
-pixi run navigator-status
-pixi run navigator-logs
+pixi run nav-service-start
+pixi run nav-service-stop
+pixi run nav-service-status
+pixi run nav-service-logs
 ```
 
 ## Deploy the hub program
