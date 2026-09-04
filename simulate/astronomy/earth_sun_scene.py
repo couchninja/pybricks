@@ -77,7 +77,6 @@ from simulate.astronomy.constants import (
 from simulate.astronomy.utils.camera import camera_distance_au, camera_distance_to_point_au
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
-    cmb_dipole_direction_galactocentric,
     current_time,
     earth_heliocentric_ecliptic_au,
     earth_orbit_ecliptic_au,
@@ -85,6 +84,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
+    milky_way_cmb_direction_galactocentric,
     moon_heliocentric_ecliptic_au,
     observer_direction_ecliptic,
     observer_direction_ecliptic_for_target,
@@ -260,7 +260,6 @@ def update_earth_sun_scene(
         matrix=_cmb_dipole_arrow_transform(
             time,
             camera_distance_to_point_au(scene, _galactic_center_position(state)),
-            state["galactic_center_radius_au"],
         ),
     )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
@@ -430,10 +429,9 @@ def _observer_velocity_arrow_transform(
 def _cmb_dipole_arrow_transform(
     time: Time,
     camera_distance_au: float,
-    origin_offset_au: float,
 ) -> np.ndarray:
-    direction = cmb_dipole_direction_galactocentric(time)
-    origin = direction * origin_offset_au
+    direction = milky_way_cmb_direction_galactocentric(time)
+    origin = np.zeros(3, dtype=float)
     return _direction_arrow_transform(origin, direction, camera_distance_au)
 
 
