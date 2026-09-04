@@ -2,6 +2,7 @@ import numpy as np
 from astropy import units as u
 from astropy.coordinates import (
     GCRS,
+    ICRS,
     ITRS,
     BarycentricMeanEcliptic,
     CartesianRepresentation,
@@ -136,11 +137,12 @@ def sun_galactic_orbit_kpc(time: Time, samples: int = 360) -> np.ndarray:
 
 
 def ecliptic_to_galactocentric_rotation(time: Time) -> np.ndarray:
+    del time
     return np.column_stack(
         [
-            _ecliptic_direction_galactocentric(np.array([1.0, 0.0, 0.0]), time),
-            _ecliptic_direction_galactocentric(np.array([0.0, 1.0, 0.0]), time),
-            _ecliptic_direction_galactocentric(np.array([0.0, 0.0, 1.0]), time),
+            _ecliptic_direction_galactocentric(np.array([1.0, 0.0, 0.0])),
+            _ecliptic_direction_galactocentric(np.array([0.0, 1.0, 0.0])),
+            _ecliptic_direction_galactocentric(np.array([0.0, 0.0, 1.0])),
         ]
     )
 
@@ -350,18 +352,60 @@ def _heliocentric_ecliptic_au(earth: CartesianRepresentation, sun: CartesianRepr
     )
 
 
-def _ecliptic_direction_galactocentric(vector: np.ndarray, time: Time) -> np.ndarray:
-    sun_galactic = sun_galactocentric_kpc(time)
-    ecliptic = BarycentricMeanEcliptic(
+def _galactocentric_direction_ecliptic(vector: np.ndarray) -> np.ndarray:
+    origin = Galactocentric(
+        x=0 * u.kpc,
+        y=0 * u.kpc,
+        z=0 * u.kpc,
+        representation_type="cartesian",
+    ).transform_to(BarycentricMeanEcliptic())
+    tip = Galactocentric(
         x=vector[0] * u.kpc,
         y=vector[1] * u.kpc,
         z=vector[2] * u.kpc,
         representation_type="cartesian",
+    ).transform_to(BarycentricMeanEcliptic())
+    direction = np.array(tip.cartesian.xyz.to_value(u.kpc), dtype=float) - np.array(
+        origin.cartesian.xyz.to_value(u.kpc), dtype=float
     )
-    gcrs = ecliptic.transform_to(GCRS(obstime=time))
-    galactic = SkyCoord(gcrs, representation_type="cartesian").transform_to(Galactocentric())
-    direction = np.array(galactic.cartesian.xyz.to_value(u.kpc), dtype=float)
-    direction -= sun_galactic
+    return direction / np.linalg.norm(direction)
+
+
+def _ecliptic_direction_galactocentric(vector: np.ndarray) -> np.ndarray:
+    origin = BarycentricMeanEcliptic(
+        x=0 * u.kpc,
+        y=0 * u.kpc,
+        z=0 * u.kpc,
+        representation_type="cartesian",
+    ).transform_to(Galactocentric())
+    tip = BarycentricMeanEcliptic(
+        x=vector[0] * u.kpc,
+        y=vector[1] * u.kpc,
+        z=vector[2] * u.kpc,
+        representation_type="cartesian",
+    ).transform_to(Galactocentric())
+    direction = np.array(tip.cartesian.xyz.to_value(u.kpc), dtype=float) - np.array(
+        origin.cartesian.xyz.to_value(u.kpc), dtype=float
+    )
+    return direction / np.linalg.norm(direction)
+
+
+def _icrs_direction_galactocentric(vector: np.ndarray) -> np.ndarray:
+    origin = ICRS(
+        x=0 * u.kpc,
+        y=0 * u.kpc,
+        z=0 * u.kpc,
+        representation_type="cartesian",
+    ).transform_to(Galactocentric())
+    tip = ICRS(
+        x=vector[0] * u.kpc,
+        y=vector[1] * u.kpc,
+        z=vector[2] * u.kpc,
+        representation_type="cartesian",
+    ).transform_to(Galactocentric())
+    direction = np.array(tip.cartesian.xyz.to_value(u.kpc), dtype=float) - np.array(
+        origin.cartesian.xyz.to_value(u.kpc), dtype=float
+    )
     return direction / np.linalg.norm(direction)
 
 
@@ -386,34 +430,30 @@ def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
     radius_xy = np.hypot(sun_galactic[0], sun_galactic[1])
     tangent = (
         np.array(
-            [-sun_galactic[1], sun_galactic[0], 0.0],
+            [sun_galactic[1], -sun_galactic[0], 0.0],
             dtype=float,
         )
         / radius_xy
     )
     speed_kpc_per_s = SOLAR_GALACTIC_ORBITAL_SPEED.to_value(u.kpc / u.s)
-    galactic_velocity_au_per_s = tangent * speed_kpc_per_s * KPC_TO_AU
-    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
-    return galactic_rotation.T @ galactic_velocity_au_per_s
+    ecliptic_direction = _galactocentric_direction_ecliptic(tangent)
+    return ecliptic_direction * speed_kpc_per_s * KPC_TO_AU
 
 
 def cmb_dipole_direction_galactocentric(time: Time) -> np.ndarray:
-    direction = SkyCoord(
-        l=CMB_DIPOLE_L,
-        b=CMB_DIPOLE_B,
-        distance=1 * u.kpc,
-        frame=Galactic,
-    )
-    galactocentric = direction.transform_to(Galactocentric())
-    unit = np.array(galactocentric.cartesian.xyz.value, dtype=float)
-    return unit / np.linalg.norm(unit)
+    del time
+    direction = SkyCoord(l=CMB_DIPOLE_L, b=CMB_DIPOLE_B, frame=Galactic)
+    icrs_vector = np.array(direction.icrs.cartesian.xyz.to_value(u.one), dtype=float)
+    return _icrs_direction_galactocentric(icrs_vector)
 
 
 def _cmb_dipole_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
-    direction = cmb_dipole_direction_galactocentric(time)
-    galactic_rotation = ecliptic_to_galactocentric_rotation(time)
-    ecliptic_direction = galactic_rotation.T @ direction
-    return ecliptic_direction * CMB_DIPOLE_SPEED.to_value(u.au / u.s)
+    del time
+    direction = SkyCoord(l=CMB_DIPOLE_L, b=CMB_DIPOLE_B, frame=Galactic)
+    ecliptic = direction.transform_to(BarycentricMeanEcliptic())
+    unit = np.array(ecliptic.cartesian.xyz.to_value(u.one), dtype=float)
+    unit /= np.linalg.norm(unit)
+    return unit * CMB_DIPOLE_SPEED.to_value(u.au / u.s)
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
