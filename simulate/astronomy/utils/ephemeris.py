@@ -314,7 +314,7 @@ def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> n
         PointingTarget.CMB_DIPOLE,
     ):
         velocity += _earth_orbital_velocity_ecliptic_au_per_s(time)
-    if target in (PointingTarget.MILKY_WAY_ORBIT, PointingTarget.CMB_DIPOLE):
+    if target in (PointingTarget.MILKY_WAY_ORBIT,):
         velocity += _sun_galactic_orbital_velocity_ecliptic_au_per_s(time)
     if target == PointingTarget.CMB_DIPOLE:
         velocity += _cmb_dipole_velocity_ecliptic_au_per_s(time)
@@ -425,16 +425,25 @@ def _earth_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
     return (position_after - position_before) / (2 * delta.to(u.s).value)
 
 
-def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+def _sun_galactic_orbital_tangent_galactocentric(time: Time) -> np.ndarray:
     sun_galactic = sun_galactocentric_kpc(time)
     radius_xy = np.hypot(sun_galactic[0], sun_galactic[1])
-    tangent = (
+    return (
         np.array(
             [sun_galactic[1], -sun_galactic[0], 0.0],
             dtype=float,
         )
         / radius_xy
     )
+
+
+def _sun_galactic_orbital_velocity_galactocentric_kpc_per_s(time: Time) -> np.ndarray:
+    speed_kpc_per_s = SOLAR_GALACTIC_ORBITAL_SPEED.to_value(u.kpc / u.s)
+    return _sun_galactic_orbital_tangent_galactocentric(time) * speed_kpc_per_s
+
+
+def _sun_galactic_orbital_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
+    tangent = _sun_galactic_orbital_tangent_galactocentric(time)
     speed_kpc_per_s = SOLAR_GALACTIC_ORBITAL_SPEED.to_value(u.kpc / u.s)
     ecliptic_direction = _galactocentric_direction_ecliptic(tangent)
     return ecliptic_direction * speed_kpc_per_s * KPC_TO_AU
@@ -445,6 +454,13 @@ def cmb_dipole_direction_galactocentric(time: Time) -> np.ndarray:
     direction = SkyCoord(l=CMB_DIPOLE_L, b=CMB_DIPOLE_B, frame=Galactic)
     icrs_vector = np.array(direction.icrs.cartesian.xyz.to_value(u.one), dtype=float)
     return _icrs_direction_galactocentric(icrs_vector)
+
+
+def milky_way_cmb_direction_galactocentric(time: Time) -> np.ndarray:
+    cmb_speed_kpc_per_s = CMB_DIPOLE_SPEED.to_value(u.kpc / u.s)
+    cmb_velocity = cmb_dipole_direction_galactocentric(time) * cmb_speed_kpc_per_s
+    milky_way_velocity = cmb_velocity - _sun_galactic_orbital_velocity_galactocentric_kpc_per_s(time)
+    return milky_way_velocity / np.linalg.norm(milky_way_velocity)
 
 
 def _cmb_dipole_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:

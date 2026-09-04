@@ -70,6 +70,7 @@ SOLAR_GALACTIC_ORBITAL_SPEED = 220 * u.km / u.s
 SIDEREAL_DAY = 86164.0905 * u.s
 
 # Solar-system velocity relative to the CMB rest frame (Planck 2018 dipole).
+# This already includes the orbit of the sun around the galactic center, so watch out for double-counting.
 CMB_DIPOLE_SPEED = 369.82 * u.km / u.s
 CMB_DIPOLE_L = 264.021 * u.deg
 CMB_DIPOLE_B = 48.253 * u.deg
