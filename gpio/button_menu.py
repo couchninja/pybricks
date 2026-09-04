@@ -45,8 +45,8 @@ BUTTONS: tuple[ButtonConfig, ...] = (
         "button_pin": 27,
         "led_pin": 17,
         "modes": (
-            {"target": PointingTarget.MOON, "color": Color.BLUE},
             {"target": PointingTarget.SUN, "color": Color.RED},
+            {"target": PointingTarget.MOON, "color": Color.BLUE},
             {"target": PointingTarget.MILKY_WAY_CENTER, "color": Color.GREEN},
         ),
     },

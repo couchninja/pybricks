@@ -170,7 +170,7 @@ No persistent Bluetooth or system configuration outside this repo is required.
 ## 8. Debug scripts
 
 Broadcast-era scripts under `scripts/debug_*.py` were removed after the GATT
-stdin switch. Use `pixi run test` / `pixi run navigator` for verification.
+stdin switch. Use `pixi run test` / `pixi run nav` for verification.
 
 ---
 
@@ -196,7 +196,7 @@ stdin switch. Use `pixi run test` / `pixi run navigator` for verification.
 
 **Result**
 
-- `pixi run test` still passed; `pixi run navigator` failed.
+- `pixi run test` still passed; `pixi run nav` failed.
 - **Payload too large:** `motor.run_until_stalled B 100 duty_limit=30` encodes
   to ~48 bytes; `pb_ble` rejects anything over **26 bytes**:
   `ValueError: Payload too large: 48 bytes (maximum is 26 bytes)`.
@@ -216,7 +216,7 @@ stdin switch. Use `pixi run test` / `pixi run navigator` for verification.
   Example on the wire: `2 motor.stall B 100 30` (~23 bytes encoded).
 - Hub calls `motor.run_until_stalled(speed, then, duty_limit)` with positional
   args (no keyword args on MicroPython).
-- `pixi run navigator` works end-to-end (motor B stalls, returns angle).
+- `pixi run nav` works end-to-end (motor B stalls, returns angle).
 
 ---
 
@@ -251,4 +251,4 @@ Removed: `hub_client/broadcast.py`, `pb_ble_import.py`, `constants.py`,
 BlueZ `--experimental` is **not** needed; verified working with stock
 `bluetoothd` after removing the experimental systemd drop-in.
 
-**Verify:** `pixi run test`, `pixi run navigator`
+**Verify:** `pixi run test`, `pixi run nav`

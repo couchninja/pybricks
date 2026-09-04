@@ -10,7 +10,7 @@ Group=aron
 WorkingDirectory=/home/aron/code/pybricks
 Environment=PATH=/home/aron/.pixi/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/aron/.pixi/bin/pixi run navigator
+ExecStart=/home/aron/.pixi/bin/pixi run nav
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:/home/aron/code/pybricks/logs/navigator.log
