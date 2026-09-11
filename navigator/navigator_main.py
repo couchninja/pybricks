@@ -1,11 +1,11 @@
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 
 from pybricks.parameters import Port
 
 from gpio.button_menu import ButtonData, ButtonMenu
-from pybricks_client import Motor, MotorStalledError, MoveHub
+from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.utils.ephemeris import (
@@ -105,60 +105,39 @@ async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
 
 
 @asynccontextmanager
-async def connected_hub(
-    buttons: ButtonMenu, program: str | None
-) -> AsyncIterator[MoveHub]:
+async def connected_hub(program: str | None) -> AsyncIterator[MoveHub]:
     async with AsyncExitStack() as stack:
-        async with buttons.blinking(0):
-            while True:
-                try:
-                    hub = await stack.enter_async_context(
-                        MoveHub.connect(program=program, retries=1)
-                    )
-                    break
-                except RECOVERABLE_ERRORS as exc:
-                    print(
-                        f"Connection failed ({format_error(exc)}); searching again..."
-                    )
-                    await asyncio.sleep(RECONNECT_DELAY_S)
+        while True:
+            try:
+                hub = await stack.enter_async_context(
+                    MoveHub.connect(program=program, retries=1)
+                )
+                break
+            except RECOVERABLE_ERRORS as exc:
+                print(f"Connection failed ({format_error(exc)}); searching again...")
+                await asyncio.sleep(RECONNECT_DELAY_S)
         yield hub
 
 
+async def point_selected(
+    hub: MoveHub, sensor: ColorDistanceSensor, button: ButtonData
+) -> None:
+    print(f"Selected button: {button}")
+    await sensor.light.on(button["color"])
+    await point_at_target(hub, button["target"])
+
+
 async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
+    """Point at the selected target, then wait for the next press or a refresh."""
     sensor = hub.color_distance_sensor(SENSOR_PORT)
-    activity = asyncio.Event()
-    lock = asyncio.Lock()
-
-    async def point_selected() -> None:
-        async with lock:
-            selected = buttons.selected_button
-            print(f"Button: {selected}")
-            await sensor.light.on(selected["color"])
-            await point_at_target(hub, selected["target"])
-
-    async def on_target_selected(button: ButtonData) -> None:
-        activity.set()
-        print(f"Target: {button['target'].label}")
-        await point_selected()
-
-    async def refresh_on_inactivity() -> None:
-        while True:
-            activity.clear()
-            try:
-                await asyncio.wait_for(activity.wait(), timeout=INACTIVITY_REFRESH_S)
-            except TimeoutError:
-                await point_selected()
-
-    buttons.on_selection_changed(on_target_selected)
     try:
-        buttons.apply_entry_mode()
-        await point_selected()
-        await asyncio.gather(buttons.run(), refresh_on_inactivity())
+        while True:
+            async with buttons.blinking_selected():
+                await point_selected(hub, sensor, buttons.selected_button)
+            await buttons.wait_for_selection(timeout_s=INACTIVITY_REFRESH_S)
     finally:
-        try:
+        with suppress(*RECOVERABLE_ERRORS):
             await sensor.light.off()
-        except RECOVERABLE_ERRORS:
-            pass
 
 
 async def navigator_main(upload_program: bool = False) -> None:
@@ -167,10 +146,12 @@ async def navigator_main(upload_program: bool = False) -> None:
 
     with ButtonMenu() as buttons:
         while True:
+            buttons.reset()
             try:
-                async with connected_hub(buttons, program) as hub:
-                    print("Hub connected.")
-                    async with buttons.blinking(1):
+                async with AsyncExitStack() as stack:
+                    async with buttons.blinking_selected():
+                        hub = await stack.enter_async_context(connected_hub(program))
+                        print("Hub connected.")
                         await calibrate_motors(hub)
                     await run_selection_loop(hub, buttons)
             except RECOVERABLE_ERRORS as exc:

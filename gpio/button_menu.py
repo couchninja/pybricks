@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from typing import TypedDict
 
@@ -11,12 +11,9 @@ from gpiod.line import Bias, Direction, Edge, Value
 from pybricks.parameters import Color
 
 from simulate.astronomy.constants import PointingTarget
-from simulate.astronomy.utils.ephemeris import current_time, sun_or_moon_pointing_target
 
 CHIP = "/dev/gpiochip0"
-DEBOUNCE_S = 0.03
 BLINK_PERIOD_S = 0.4
-CONFIRM_BLINK_PERIOD_S = 0.15
 
 
 class ButtonMode(TypedDict):
@@ -35,9 +32,6 @@ class ButtonData(TypedDict):
     led_pin: int
     target: PointingTarget
     color: Color
-
-
-ButtonListener = Callable[[ButtonData], Awaitable[None]]
 
 
 BUTTONS: tuple[ButtonConfig, ...] = (
@@ -72,22 +66,23 @@ BUTTONS: tuple[ButtonConfig, ...] = (
     },
 )
 
+DEFAULT_BUTTON_INDEX = 1
+
 
 class ButtonMenu:
+    """Single-selection button panel: one LED lit for the selected target."""
+
     def __init__(
         self,
         buttons: tuple[ButtonConfig, ...] = BUTTONS,
         *,
         chip: str = CHIP,
-        debounce_s: float = DEBOUNCE_S,
     ) -> None:
         self._buttons = buttons
         self._chip = chip
-        self._debounce_s = debounce_s
-        self._button_index_by_pin = {button["button_pin"]: index for index, button in enumerate(buttons)}
+        self._index_by_pin = {button["button_pin"]: index for index, button in enumerate(buttons)}
         self._mode_indices = [0] * len(buttons)
-        self._selected_index = 0
-        self._selection_listeners: list[ButtonListener] = []
+        self._selected_index = DEFAULT_BUTTON_INDEX
         self._request: gpiod.LineRequest | None = None
 
     def __enter__(self) -> ButtonMenu:
@@ -96,120 +91,19 @@ class ButtonMenu:
             consumer="navigator-buttons",
             config=self._line_config(),
         )
+        self.reset()
         return self
 
     def __exit__(self, *exc: object) -> None:
         if self._request is not None:
-            self.all_leds_off()
+            for button in self._buttons:
+                self._set_led(button["led_pin"], False)
             self._request.release()
             self._request = None
 
     @property
     def selected_button(self) -> ButtonData:
-        return self._button_data(self._selected_index)
-
-    def on_selection_changed(self, listener: ButtonListener) -> None:
-        self._selection_listeners = [listener]
-
-    def apply_entry_mode(self) -> None:
         index = self._selected_index
-        modes = self._buttons[index]["modes"]
-        if len(modes) < 2:
-            return
-        target = sun_or_moon_pointing_target(current_time())
-        for mode_index, mode in enumerate(modes):
-            if mode["target"] == target:
-                self._mode_indices[index] = mode_index
-                return
-        raise RuntimeError(f"button {index} has no mode for {target}")
-
-    def all_leds_off(self) -> None:
-        for button in self._buttons:
-            self._set_led(button["led_pin"], False)
-
-    @asynccontextmanager
-    async def blinking(
-        self, index: int, *, period_s: float = BLINK_PERIOD_S
-    ) -> AsyncIterator[None]:
-        led_pin = self._buttons[index]["led_pin"]
-        task = asyncio.create_task(self._blink_led(led_pin, period_s))
-        try:
-            yield
-        finally:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
-            self._set_led(led_pin, False)
-
-    async def run(self) -> None:
-        self._show_selection(self._selected_index)
-        last_event_s = {button["button_pin"]: 0.0 for button in self._buttons}
-
-        while True:
-            event = await self._wait_for_press(last_event_s)
-            await self._handle_press(event)
-            await asyncio.to_thread(self._drain_edge_events)
-
-    async def _wait_for_press(
-        self, last_event_s: dict[int, float]
-    ) -> gpiod.EdgeEvent:
-        request = self._require_request()
-        while True:
-            await asyncio.to_thread(request.wait_edge_events)
-            for event in request.read_edge_events():
-                if self._debounce(event, last_event_s):
-                    return event
-
-    async def _handle_press(self, event: gpiod.EdgeEvent) -> None:
-        index = self._button_index_by_pin[event.line_offset]
-
-        if index == self._selected_index:
-            modes = self._buttons[index]["modes"]
-            if len(modes) < 2:
-                return
-            self._mode_indices[index] = (self._mode_indices[index] + 1) % len(modes)
-            await self._blink_led_times(self._buttons[index]["led_pin"])
-        else:
-            self._selected_index = index
-            self.apply_entry_mode()
-            self._show_selection(index)
-
-        button = self._button_data(index)
-        for listener in self._selection_listeners:
-            await listener(button)
-
-    def _debounce(
-        self, event: gpiod.EdgeEvent, last_event_s: dict[int, float]
-    ) -> bool:
-        button_pin = event.line_offset
-        if button_pin not in self._button_index_by_pin:
-            return False
-        now = time.monotonic()
-        if now - last_event_s[button_pin] < self._debounce_s:
-            return False
-        last_event_s[button_pin] = now
-        return True
-
-    def _drain_edge_events(self) -> None:
-        request = self._require_request()
-        while request.wait_edge_events(timeout=0):
-            request.read_edge_events()
-
-    async def _blink_led(self, led_pin: int, period_s: float) -> None:
-        on = False
-        while True:
-            on = not on
-            self._set_led(led_pin, on)
-            await asyncio.sleep(period_s)
-
-    async def _blink_led_times(self, led_pin: int) -> None:
-        for _ in range(2):
-            self._set_led(led_pin, False)
-            await asyncio.sleep(CONFIRM_BLINK_PERIOD_S)
-            self._set_led(led_pin, True)
-            await asyncio.sleep(CONFIRM_BLINK_PERIOD_S)
-
-    def _button_data(self, index: int) -> ButtonData:
         button = self._buttons[index]
         mode = button["modes"][self._mode_indices[index]]
         return {
@@ -219,9 +113,70 @@ class ButtonMenu:
             "color": mode["color"],
         }
 
-    def _show_selection(self, selected_index: int) -> None:
+    def reset(self) -> None:
+        """Select the default button and put every button back on its first mode."""
+        self._selected_index = DEFAULT_BUTTON_INDEX
+        self._mode_indices = [0] * len(self._buttons)
+        self._show_selection()
+
+    async def wait_for_selection(self, *, timeout_s: float) -> None:
+        """Wait for a press or the timeout, discarding presses made before this call.
+
+        A press on the selected button advances it to its next mode; a press on any
+        other button selects it.
+        """
+        request = self._require_request()
+        await asyncio.to_thread(self._drain_edge_events)
+        deadline = time.monotonic() + timeout_s
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            if not await asyncio.to_thread(request.wait_edge_events, remaining):
+                return
+            for event in request.read_edge_events():
+                index = self._index_by_pin.get(event.line_offset)
+                if index is not None:
+                    self._select(index)
+                    return
+
+    @asynccontextmanager
+    async def blinking_selected(self) -> AsyncIterator[None]:
+        """Blink the selected LED while the navigator is busy."""
+        led_pin = self._buttons[self._selected_index]["led_pin"]
+        task = asyncio.create_task(self._blink_led(led_pin))
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._show_selection()
+
+    def _select(self, index: int) -> None:
+        if index == self._selected_index:
+            modes = self._buttons[index]["modes"]
+            self._mode_indices[index] = (self._mode_indices[index] + 1) % len(modes)
+        else:
+            self._selected_index = index
+        self._show_selection()
+
+    def _drain_edge_events(self) -> None:
+        request = self._require_request()
+        while request.wait_edge_events(timeout=0):
+            request.read_edge_events()
+
+    async def _blink_led(self, led_pin: int) -> None:
+        on = False
+        while True:
+            on = not on
+            self._set_led(led_pin, on)
+            await asyncio.sleep(BLINK_PERIOD_S)
+
+    def _show_selection(self) -> None:
         for index, button in enumerate(self._buttons):
-            self._set_led(button["led_pin"], index == selected_index)
+            self._set_led(button["led_pin"], index == self._selected_index)
 
     def _set_led(self, led_pin: int, on: bool) -> None:
         self._require_request().set_value(

@@ -25,6 +25,7 @@ ble-scan = "python pybricks_client/ble_control.py scan"
 hub-stop = "python pybricks_client/ble_control.py stop"
 hub-upload = "python pybricks_client/ble_control.py download pybricks_hub/thin_ble_hub.py"
 test-hub = "python pybricks_client/test_hub.py"
+test-buttons = "python tests/test_button_menu.py"
 
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"

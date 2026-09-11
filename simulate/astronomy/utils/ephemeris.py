@@ -287,15 +287,6 @@ def observer_surface_vector_and_euler_angles_for_target(
     return surface_vector, euler_angles, speed
 
 
-def sun_or_moon_pointing_target(time: Time) -> PointingTarget:
-    _surface, (_yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
-        time, PointingTarget.SUN
-    )
-    if pitch > 0:
-        return PointingTarget.SUN
-    return PointingTarget.MOON
-
-
 def observer_velocity_ecliptic_au_per_s(time: Time, target: PointingTarget) -> np.ndarray:
     if target not in PointingTarget:
         raise ValueError(f"unknown pointing target: {target}")
