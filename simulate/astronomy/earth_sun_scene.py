@@ -5,7 +5,7 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, moon, observer, earth_orbit, year_boundaries, earth_axis
+          sun, earth, moon, iss, observer, earth_orbit, year_boundaries, earth_axis
         galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
@@ -53,6 +53,8 @@ from simulate.astronomy.constants import (
     GALACTIC_CENTER_RADIUS_ORBIT_FRACTION,
     GALACTIC_ORBIT_COLOR,
     GALACTIC_ORBIT_DISTANCE_SCALE,
+    ISS_COLOR,
+    ISS_MARKER_EARTH_RADII,
     KPC_TO_AU,
     MILKY_WAY_FRAME,
     MOON_COLOR,
@@ -84,6 +86,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_spin_axis_ecliptic,
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
+    iss_heliocentric_ecliptic_au,
     milky_way_cmb_direction_galactocentric,
     moon_heliocentric_ecliptic_au,
     observer_direction_ecliptic,
@@ -92,6 +95,8 @@ from simulate.astronomy.utils.ephemeris import (
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
+from simulate.astronomy.utils.iss import refresh_iss_tle
+from simulate.astronomy.utils.iss_tle import ISS_TLE_REFRESH_INTERVAL_S
 
 last_orientation_print = -1
 
@@ -99,6 +104,7 @@ last_orientation_print = -1
 class EarthSunAnimationState(TypedDict):
     start_time: Time
     last_orbit_time: Time | None
+    last_iss_tle_refresh: float | None
     time_scaling: float
     wall_start: float | None
     current_time: Time | None
@@ -106,6 +112,7 @@ class EarthSunAnimationState(TypedDict):
 
 class EarthSunState(TypedDict):
     earth_position: np.ndarray
+    iss_position: np.ndarray
     moon_position: np.ndarray
     earth_rotation: np.ndarray
     spin_axis: np.ndarray
@@ -119,6 +126,8 @@ class EarthSunState(TypedDict):
 def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     if time is None:
         time = current_time()
+
+    refresh_iss_tle()
 
     scene = trimesh.Scene(base_frame=ROOT_FRAME)
     scene.graph.update(EARTH_CENTER_FRAME, ROOT_FRAME, matrix=np.eye(4))
@@ -149,6 +158,19 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ),
         geom_name="moon",
         node_name="moon",
+        parent_node_name=SOLAR_SYSTEM_FRAME,
+    )
+
+    scene.add_geometry(
+        _color_mesh(
+            trimesh.creation.icosphere(
+                radius=ISS_MARKER_EARTH_RADII * EARTH_RADIUS_AU,
+                subdivisions=2,
+            ),
+            ISS_COLOR,
+        ),
+        geom_name="iss",
+        node_name="iss",
         parent_node_name=SOLAR_SYSTEM_FRAME,
     )
 
@@ -239,6 +261,11 @@ def update_earth_sun_scene(
         matrix=_transform_matrix(np.eye(3), state["moon_position"]),
     )
     scene.graph.update(
+        "iss",
+        SOLAR_SYSTEM_FRAME,
+        matrix=_transform_matrix(np.eye(3), state["iss_position"]),
+    )
+    scene.graph.update(
         "observer",
         SOLAR_SYSTEM_FRAME,
         matrix=_transform_matrix(np.eye(3), state["observer_position"]),
@@ -294,6 +321,10 @@ def earth_sun_animation_callback(scene: trimesh.Scene) -> None:
     if animation["wall_start"] is None:
         animation["wall_start"] = perf_counter()
     now = perf_counter()
+    last_iss_tle_refresh = animation["last_iss_tle_refresh"]
+    if last_iss_tle_refresh is None or now - last_iss_tle_refresh >= ISS_TLE_REFRESH_INTERVAL_S:
+        refresh_iss_tle()
+        animation["last_iss_tle_refresh"] = now
     elapsed = now - animation["wall_start"]
     time = animation["start_time"] + elapsed * animation["time_scaling"] * u.second
     animation["current_time"] = time
@@ -344,6 +375,7 @@ def _earth_sun_state(time: Time) -> EarthSunState:
 
     return {
         "earth_position": earth_position,
+        "iss_position": iss_heliocentric_ecliptic_au(time),
         "moon_position": moon_heliocentric_ecliptic_au(time),
         "earth_rotation": earth_orientation_matrix(time),
         "spin_axis": spin_axis,
