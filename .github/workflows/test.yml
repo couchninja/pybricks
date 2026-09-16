@@ -15,5 +15,5 @@ jobs:
         with:
           cache: true
 
-      - name: Run pytest
-        run: pixi run pytest
+      - name: Run tests (offline and online)
+        run: pixi run test
