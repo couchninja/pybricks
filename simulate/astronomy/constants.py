@@ -55,6 +55,8 @@ EARTH_ORBIT_COLOR = [180, 180, 200, 255]
 YEAR_BOUNDARY_COLOR = [255, 220, 80, 255]
 SUN_COLOR = [255, 210, 60, 255]
 MOON_COLOR = [210, 210, 205, 255]
+ISS_COLOR = [70, 130, 255, 255]
+ISS_MARKER_EARTH_RADII = 0.14
 AXIS_COLOR = [220, 60, 60, 255]
 OBSERVER_COLOR = [255, 80, 40, 255]
 OBSERVER_VELOCITY_ARROW_COLOR = [80, 220, 255, 255]
@@ -84,6 +86,7 @@ class PointingTarget(StrEnum):
     SUN = "sun"
     MOON = "moon"
     MILKY_WAY_CENTER = "milky_way_center"
+    ISS = "iss"
 
     @property
     def label(self) -> str:
@@ -98,6 +101,7 @@ _POINTING_TARGET_LABELS = {
     PointingTarget.SUN: "Sun",
     PointingTarget.MOON: "Moon",
     PointingTarget.MILKY_WAY_CENTER: "Milky Way center",
+    PointingTarget.ISS: "ISS",
 }
 POINTING_TARGET_BUTTON_MARGIN = 8
 POINTING_TARGET_BUTTON_WIDTH = 200

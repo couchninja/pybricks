@@ -28,6 +28,7 @@ from simulate.astronomy.constants import (
     SOLAR_GALACTIC_ORBITAL_SPEED,
     PointingTarget,
 )
+from simulate.astronomy.utils.iss import iss_geocentric_gcrs_km
 
 # Keep Astropy's default IERS auto-download when online. Offline (or when the
 # download fails), the probe raises ValueError once predictive data is older
@@ -38,7 +39,9 @@ except ValueError:
     iers_conf.auto_max_age = None
 
 
-_BODY_POINTING_TARGETS = frozenset({PointingTarget.SUN, PointingTarget.MOON, PointingTarget.MILKY_WAY_CENTER})
+_BODY_POINTING_TARGETS = frozenset(
+    {PointingTarget.SUN, PointingTarget.MOON, PointingTarget.MILKY_WAY_CENTER, PointingTarget.ISS}
+)
 
 
 def earth_orientation_matrix(time: Time) -> np.ndarray:
@@ -103,6 +106,14 @@ def moon_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
     moon = get_body_barycentric("moon", time)
     sun = get_body_barycentric("sun", time)
     return _heliocentric_ecliptic_au(moon, sun)
+
+
+def iss_geocentric_ecliptic_au(time: Time) -> np.ndarray:
+    return _gcrs_displacement_to_ecliptic_au(iss_geocentric_gcrs_km(time) * 1000.0, time)
+
+
+def iss_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
+    return earth_heliocentric_ecliptic_au(time) + iss_geocentric_ecliptic_au(time)
 
 
 def sun_galactocentric_kpc(time: Time) -> np.ndarray:
@@ -231,6 +242,10 @@ def galactic_center_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
     return _body_direction_ecliptic_from_observer(_galactic_center_heliocentric_ecliptic_au(time), time)
 
 
+def iss_direction_ecliptic_from_observer(time: Time) -> np.ndarray:
+    return _body_direction_ecliptic_from_observer(iss_heliocentric_ecliptic_au(time), time)
+
+
 def observer_direction_ecliptic_for_target(time: Time, target: PointingTarget) -> np.ndarray | None:
     if target == PointingTarget.SUN:
         return sun_direction_ecliptic_from_observer(time)
@@ -238,6 +253,8 @@ def observer_direction_ecliptic_for_target(time: Time, target: PointingTarget) -
         return moon_direction_ecliptic_from_observer(time)
     if target == PointingTarget.MILKY_WAY_CENTER:
         return galactic_center_direction_ecliptic_from_observer(time)
+    if target == PointingTarget.ISS:
+        return iss_direction_ecliptic_from_observer(time)
     velocity = observer_velocity_ecliptic_au_per_s(time, target)
     speed = float(np.linalg.norm(velocity))
     if speed == 0.0:
@@ -251,7 +268,7 @@ def observer_surface_vector_and_euler_angles_for_target(
     """Surface-frame direction and heading for a pointing target.
 
     Uses ``observer_direction_ecliptic_for_target`` (body/sky direction for
-    ``PointingTarget.SUN``, ``PointingTarget.MOON``, and
+    ``PointingTarget.SUN``, ``PointingTarget.MOON``, ``PointingTarget.ISS``, and
     ``PointingTarget.MILKY_WAY_CENTER``, otherwise normalized ecliptic velocity)
     and expresses that direction in the observer's local surface frame (see
     ``ecliptic_to_observer_surface``).
@@ -270,7 +287,7 @@ def observer_surface_vector_and_euler_angles_for_target(
         roll — always 0 (a direction does not determine roll)
     speed
       Speed of the ecliptic velocity vector in AU/s (0 for body/sky targets
-      ``PointingTarget.SUN``, ``PointingTarget.MOON``, and
+      ``PointingTarget.SUN``, ``PointingTarget.MOON``, ``PointingTarget.ISS``, and
       ``PointingTarget.MILKY_WAY_CENTER``).
 
     When no direction is defined, ``surface_vector`` and ``euler_angles`` are both zero.
@@ -461,6 +478,14 @@ def _cmb_dipole_velocity_ecliptic_au_per_s(time: Time) -> np.ndarray:
     unit = np.array(ecliptic.cartesian.xyz.to_value(u.one), dtype=float)
     unit /= np.linalg.norm(unit)
     return unit * CMB_DIPOLE_SPEED.to_value(u.au / u.s)
+
+
+def _gcrs_displacement_to_ecliptic_au(displacement_m: np.ndarray, time: Time) -> np.ndarray:
+    length_m = float(np.linalg.norm(displacement_m))
+    if length_m == 0.0:
+        return np.zeros(3, dtype=float)
+    direction_ecliptic = _gcrs_unit_vector_to_ecliptic(displacement_m / length_m, time)
+    return direction_ecliptic * (length_m / u.au.to(u.m))
 
 
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
