@@ -54,6 +54,7 @@ pre-commit = ">=4.0"
 ruff = "==0.14.14"
 ty = "==0.0.14"
 watchfiles = ">=1.0"
+skyfield = ">=1.55, <2"
 
 [target.linux.pypi-dependencies]
 gpiod = ">=2.5.0, <3"

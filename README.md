@@ -165,6 +165,7 @@ iers_conf.auto_max_age = None
 ```
 but it did not solve the issue.
 I don't think any part of the project uses internet connection?
+- ISS data download was added after this issue appeared
 It is hard to test since we remote into the raspberry which needs it to be network connected.
 - turn off internet modem for testing?
 - simulate having no internet somehow with os config/python launch flags?
