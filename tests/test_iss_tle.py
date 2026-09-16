@@ -143,18 +143,3 @@ def test_url_error_maps_to_network_unavailable() -> None:
         except iss_tle.IssTleNetworkUnavailable:
             raised = True
     assert raised
-
-
-def main() -> None:
-    test_offline_uses_bundled_when_cache_missing()
-    test_offline_uses_cache_when_present()
-    test_http_error_raises()
-    test_invalid_response_raises()
-    test_success_writes_cache()
-    test_always_attempts_fetch_when_online()
-    test_url_error_maps_to_network_unavailable()
-    print("iss tle tests passed")
-
-
-if __name__ == "__main__":
-    main()

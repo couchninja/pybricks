@@ -1,6 +1,5 @@
 """Button menu selection logic, exercised without GPIO hardware."""
 
-import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -108,15 +107,3 @@ async def test_reset_restores_default() -> None:
         request.incoming.append(SUN_BUTTON_PIN)
         await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
         assert menu.selected_button["target"] == PointingTarget.SUN
-
-
-async def main() -> None:
-    test_default_selection()
-    await test_first_press_points_at_sun()
-    await test_presses_while_busy_are_dropped()
-    await test_reset_restores_default()
-    print("button menu tests passed")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

@@ -21,3 +21,12 @@ repos:
   hooks:
     - id: ty-check
       args: [--error-on-warning]
+
+- repo: local
+  hooks:
+    - id: pytest
+      name: pytest
+      entry: pixi run pytest
+      language: system
+      pass_filenames: false
+      always_run: true
