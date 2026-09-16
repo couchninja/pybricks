@@ -42,6 +42,7 @@ BUTTONS: tuple[ButtonConfig, ...] = (
             {"target": PointingTarget.SUN, "color": Color.RED},
             {"target": PointingTarget.MOON, "color": Color.BLUE},
             {"target": PointingTarget.MILKY_WAY_CENTER, "color": Color.GREEN},
+            {"target": PointingTarget.ISS, "color": Color.BLUE},
         ),
     },
     {
@@ -179,9 +180,7 @@ class ButtonMenu:
             self._set_led(button["led_pin"], index == self._selected_index)
 
     def _set_led(self, led_pin: int, on: bool) -> None:
-        self._require_request().set_value(
-            led_pin, Value.ACTIVE if on else Value.INACTIVE
-        )
+        self._require_request().set_value(led_pin, Value.ACTIVE if on else Value.INACTIVE)
 
     def _require_request(self) -> gpiod.LineRequest:
         if self._request is None:

@@ -12,6 +12,7 @@ from simulate.astronomy.utils.ephemeris import (
     current_time,
     observer_surface_vector_and_euler_angles_for_target,
 )
+from simulate.astronomy.utils.iss import refresh_iss_tle
 
 INACTIVITY_REFRESH_S = 10.0
 RECONNECT_DELAY_S = 2.0
@@ -23,6 +24,7 @@ EXTERNAL_MOTOR_PORT = Port.D
 SENSOR_PORT = Port.C
 
 _last_target_angles: dict[str, float] = {}
+
 
 def clamp_yaw(yaw: float) -> float:
     return min(yaw % 360, 340)
@@ -56,18 +58,11 @@ async def calibrate_motors(hub: MoveHub) -> None:
     clear_last_target(motor_tilt)
 
 
-async def run_target_or_warn(
-    motor: Motor, speed: float, target_angle: float, label: str
-) -> None:
+async def run_target_or_warn(motor: Motor, speed: float, target_angle: float, label: str) -> None:
     port_name = motor.port.name
     last_target = _last_target_angles.get(port_name)
-    if (
-        last_target is not None
-        and abs(target_angle - last_target) < MIN_TARGET_ANGLE_DELTA
-    ):
-        print(
-            f"{label} motor: skipped (within {MIN_TARGET_ANGLE_DELTA:.1f}° of last target)"
-        )
+    if last_target is not None and abs(target_angle - last_target) < MIN_TARGET_ANGLE_DELTA:
+        print(f"{label} motor: skipped (within {MIN_TARGET_ANGLE_DELTA:.1f}° of last target)")
         return
 
     _last_target_angles[port_name] = target_angle
@@ -75,10 +70,7 @@ async def run_target_or_warn(
         await motor.run_target(speed, target_angle=target_angle)
     except MotorStalledError:
         actual = await motor.angle()
-        print(
-            f"Warning: {label} motor stalled at {actual:.1f}° "
-            f"(target {target_angle:.1f}°)"
-        )
+        print(f"Warning: {label} motor stalled at {actual:.1f}° (target {target_angle:.1f}°)")
         return
 
     print(f"{label} motor: moving to {target_angle:.1f}°")
@@ -88,9 +80,7 @@ async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
     print(f"Pointing at target: {target.label}")
     motor_pan, motor_tilt = get_motors(hub)
 
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
-        current_time(), target
-    )
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
 
     print(f"Raw yaw: {yaw:.1f} degrees. Pitch: {pitch:.1f} degrees.")
     yaw = clamp_yaw(yaw)
@@ -109,9 +99,7 @@ async def connected_hub(program: str | None) -> AsyncIterator[MoveHub]:
     async with AsyncExitStack() as stack:
         while True:
             try:
-                hub = await stack.enter_async_context(
-                    MoveHub.connect(program=program, retries=1)
-                )
+                hub = await stack.enter_async_context(MoveHub.connect(program=program, retries=1))
                 break
             except RECOVERABLE_ERRORS as exc:
                 print(f"Connection failed ({format_error(exc)}); searching again...")
@@ -119,9 +107,7 @@ async def connected_hub(program: str | None) -> AsyncIterator[MoveHub]:
         yield hub
 
 
-async def point_selected(
-    hub: MoveHub, sensor: ColorDistanceSensor, button: ButtonData
-) -> None:
+async def point_selected(hub: MoveHub, sensor: ColorDistanceSensor, button: ButtonData) -> None:
     print(f"Selected button: {button}")
     await sensor.light.on(button["color"])
     await point_at_target(hub, button["target"])
@@ -142,6 +128,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
 
 async def navigator_main(upload_program: bool = False) -> None:
     print("Navigator main")
+    refresh_iss_tle()
     program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
 
     with ButtonMenu() as buttons:

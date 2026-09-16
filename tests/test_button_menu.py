@@ -76,6 +76,14 @@ async def test_first_press_points_at_sun() -> None:
         await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
         assert menu.selected_button["target"] == PointingTarget.MOON
 
+        request.incoming.append(SUN_BUTTON_PIN)
+        await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.MILKY_WAY_CENTER
+
+        request.incoming.append(SUN_BUTTON_PIN)
+        await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.ISS
+
 
 async def test_presses_while_busy_are_dropped() -> None:
     with fake_menu() as (menu, request):
