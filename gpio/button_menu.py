@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager, suppress
 from typing import TypedDict
 
@@ -68,6 +68,8 @@ BUTTONS: tuple[ButtonConfig, ...] = (
 )
 
 DEFAULT_BUTTON_INDEX = 1
+
+GpiodLineConfig = dict[Iterable[int | str] | int | str, gpiod.LineSettings | None]
 
 
 class ButtonMenu:
@@ -187,8 +189,8 @@ class ButtonMenu:
             raise RuntimeError("ButtonMenu must be used as a context manager")
         return self._request
 
-    def _line_config(self) -> dict[int, gpiod.LineSettings]:
-        config: dict[int, gpiod.LineSettings] = {}
+    def _line_config(self) -> GpiodLineConfig:
+        config: GpiodLineConfig = {}
         for button in self._buttons:
             config[button["button_pin"]] = gpiod.LineSettings(
                 direction=Direction.INPUT,
