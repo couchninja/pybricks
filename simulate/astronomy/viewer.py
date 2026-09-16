@@ -86,6 +86,7 @@ def show_earth_sun(
     scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
         start_time=time,
         last_orbit_time=None,
+        last_iss_tle_refresh=perf_counter(),
         time_scaling=time_scaling,
         wall_start=None,
         current_time=time,
@@ -107,6 +108,7 @@ class _EarthCenteredViewerState(TypedDict):
     screen_labels: list[text.Label]
     fps_label: text.Label
     pointing_target_label: text.Label
+    pointing_target_button_active: bool
     fps_frames: int
     fps_interval_start: float
     fps_display: float
@@ -122,6 +124,7 @@ _BODY_SCREEN_LABELS = (
     _BodyScreenLabel("sun", "Sun", (255, 210, 60, 255)),
     _BodyScreenLabel("earth", "Earth", (255, 255, 255, 255)),
     _BodyScreenLabel("moon", "Moon", (210, 210, 205, 255)),
+    _BodyScreenLabel("iss", "ISS", (70, 130, 255, 255)),
     _BodyScreenLabel("galactic_center", "Milky Way center", (240, 200, 255, 255)),
 )
 
@@ -161,6 +164,7 @@ class EarthCenteredViewer(SceneViewer):
                 anchor_x="center",
                 anchor_y="center",
             ),
+            "pointing_target_button_active": False,
             "fps_frames": 0,
             "fps_interval_start": perf_counter(),
             "fps_display": 0.0,
@@ -194,9 +198,20 @@ class EarthCenteredViewer(SceneViewer):
     @override
     def on_mouse_press(self, x: int, y: int, buttons: int, modifiers: int) -> None:
         if buttons == pyglet.window.mouse.LEFT and self._pointing_target_button_contains(x, y):
+            self._state["pointing_target_button_active"] = True
             self._cycle_pointing_target()
             return
         super().on_mouse_press(x, y, buttons, modifiers)
+
+    @override
+    def on_mouse_drag(self, x: int, y: int, dx: float, dy: float, buttons: int, modifiers: int) -> None:
+        if self._state["pointing_target_button_active"]:
+            return
+        super().on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+
+    @override
+    def on_mouse_release(self, x: int, y: int, button: int, modifiers: int) -> None:
+        self._state["pointing_target_button_active"] = False
 
     @override
     def reset_view(self, flags: dict[str, Any] | None = None) -> None:
@@ -445,6 +460,7 @@ def _world_to_screen_gl(world: np.ndarray) -> tuple[float, float] | None:
 
 if __name__ == "__main__":
     show_earth_sun()
+    # show_earth_sun(time_scaling=3600)  # 1 hour per second
     # show_earth_sun(time_scaling=86_400)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24)  # 1 day per second
     # show_earth_sun(time_scaling=60 * 60 * 24 * 30)  # 1 month per second
