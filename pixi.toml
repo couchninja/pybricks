@@ -25,7 +25,7 @@ ble-scan = "python pybricks_client/ble_control.py scan"
 hub-stop = "python pybricks_client/ble_control.py stop"
 hub-upload = "python pybricks_client/ble_control.py download pybricks_hub/thin_ble_hub.py"
 test-hub = "python pybricks_client/test_hub.py"
-test = "pytest --disable-socket && pytest --force-enable-socket"
+test = "pytest --disable-socket --allow-unix-socket && pytest --force-enable-socket"
 
 precommit = "pre-commit run --all-files"
 precommit-install = "pre-commit install"
