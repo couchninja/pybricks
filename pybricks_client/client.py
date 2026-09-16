@@ -39,9 +39,7 @@ class _CommandSession:
         self._lock = asyncio.Lock()
         self._seq = 0
 
-    async def call(
-        self, command: str, *, timeout: float = 10.0
-    ) -> str | int | Color | None:
+    async def call(self, command: str, *, timeout: float = 10.0) -> str | int | Color | None:
         async with self._lock:
             self._seq += 1
             seq = str(self._seq)
@@ -63,9 +61,7 @@ class _CommandSession:
                     while time.monotonic() < deadline:
                         try:
                             remaining = max(0.05, deadline - time.monotonic())
-                            next_line = await _read_line(
-                                self._ble_hub, min(1.0, remaining)
-                            )
+                            next_line = await _read_line(self._ble_hub, min(1.0, remaining))
                         except (TimeoutError, *RECOVERABLE_ERRORS):
                             break
                         if not next_line:
@@ -193,9 +189,7 @@ class SensorLight:
         self.port = port
 
     async def on(self, color: Color) -> None:
-        await self._session.call(
-            f"sensor.light.on {self.port.name} {_color_name(color)}"
-        )
+        await self._session.call(f"sensor.light.on {self.port.name} {_color_name(color)}")
 
     async def off(self) -> None:
         await self._session.call(f"sensor.light.off {self.port.name}")
@@ -263,9 +257,7 @@ class MoveHub:
         last_error: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
-                async with cls._open_session(
-                    name, program=program, retries=retries
-                ) as remote:
+                async with cls._open_session(name, program=program, retries=retries) as remote:
                     yield remote
                 return
             except (*RECOVERABLE_ERRORS, HubClientError) as exc:

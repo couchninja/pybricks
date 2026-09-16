@@ -61,10 +61,7 @@ async def connect(name: str | None = None, *, retries: int = 5) -> PybricksHubBL
         except RECOVERABLE_ERRORS as exc:
             last_error = exc
             if attempt < retries:
-                print(
-                    f"Connection failed ({format_error(exc)}); "
-                    f"retrying ({attempt}/{retries})..."
-                )
+                print(f"Connection failed ({format_error(exc)}); retrying ({attempt}/{retries})...")
                 await reset_bluez_device(address)
                 await asyncio.sleep(2.0)
 

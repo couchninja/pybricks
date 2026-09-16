@@ -19,25 +19,20 @@ from pybricks_client.ble import (
 
 async def cmd_scan(_: argparse.Namespace) -> None:
     from bleak import BleakScanner
-
     from pybricksdev.ble.pybricks import PYBRICKS_SERVICE_UUID
 
     print("Scanning for Pybricks hubs (15s)...")
     devices = await BleakScanner.discover(timeout=15.0, return_adv=True)
     found = False
     for address, (device, adv) in devices.items():
-        if PYBRICKS_SERVICE_UUID.lower() not in [
-            uuid.lower() for uuid in (adv.service_uuids or [])
-        ]:
+        if PYBRICKS_SERVICE_UUID.lower() not in [uuid.lower() for uuid in (adv.service_uuids or [])]:
             continue
         found = True
         name = device.name or adv.local_name or "(unnamed)"
         print(f"  {name}  {address}")
     if not found:
         print("No Pybricks hubs found.")
-        print(
-            "Make sure the hub is on, running Pybricks firmware, and not connected elsewhere."
-        )
+        print("Make sure the hub is on, running Pybricks firmware, and not connected elsewhere.")
 
 
 async def cmd_stop(args: argparse.Namespace) -> None:
@@ -66,9 +61,7 @@ async def cmd_run(args: argparse.Namespace) -> None:
         except RECOVERABLE_ERRORS as exc:
             last_error = exc
             if attempt < args.retries:
-                print(
-                    f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})..."
-                )
+                print(f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})...")
                 await asyncio.sleep(2.0)
         finally:
             if hub is not None:
@@ -100,9 +93,7 @@ async def cmd_download(args: argparse.Namespace) -> None:
         except RECOVERABLE_ERRORS as exc:
             last_error = exc
             if attempt < args.retries:
-                print(
-                    f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})..."
-                )
+                print(f"Failed ({format_error(exc)}); retrying ({attempt}/{args.retries})...")
                 await asyncio.sleep(2.0)
         finally:
             if hub is not None:
@@ -148,9 +139,7 @@ def main() -> None:
     )
     run_parser.set_defaults(stop_first=True, wait=True)
 
-    download_parser = subparsers.add_parser(
-        "download", help="compile and upload a program without running it"
-    )
+    download_parser = subparsers.add_parser("download", help="compile and upload a program without running it")
     download_parser.add_argument("program", help="path to the .py program")
     download_parser.add_argument(
         "--start",
@@ -174,7 +163,7 @@ def main() -> None:
     }
     try:
         asyncio.run(commands[args.command](args))
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("Hub not found.", file=sys.stderr)
         print(
             "Tip: turn the hub off and on, move it closer, and close the Pybricks phone app.",

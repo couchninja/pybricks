@@ -23,11 +23,12 @@ SENSOR_PORTS = {
     "C": Port.C,
 }
 
-def parse_int(value):
+
+def parse_int(value) -> int:
     return int(value)
 
 
-def color_name(color):
+def color_name(color) -> str:
     name = str(color)
     if "." in name:
         return name.split(".")[-1]
@@ -38,13 +39,13 @@ def reply(seq, line) -> None:
     print(str(seq) + " " + line)
 
 
-def parse_stop(value):
+def parse_stop(value) -> Stop | None:
     if value in ("COAST", "BRAKE", "HOLD"):
         return Stop[value]
     return None
 
 
-def parse_color(name):
+def parse_color(name) -> Color:
     return getattr(Color, name)
 
 
@@ -167,7 +168,7 @@ def handle_command(seq, cmd, arg1="", arg2="", arg3="", arg4="") -> None:
         reply(seq, "err " + type(exc).__name__ + ":" + str(exc))
 
 
-def wait_for_move(motor):
+def wait_for_move(motor) -> bool:
     while not motor.done():
         if motor.stalled():
             motor.stop()
@@ -176,13 +177,15 @@ def wait_for_move(motor):
     return True
 
 
-def read_line():
+def read_line() -> str:
     # Move Hub: read_input_byte(chr=True) does not work; use int + chr().
     buf = ""
     while True:
         b = read_input_byte()
         if b is None:
             wait(10)
+            continue
+        if not isinstance(b, int):
             continue
         if b == 10 or b == 13:
             if buf:

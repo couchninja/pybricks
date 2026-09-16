@@ -24,6 +24,7 @@ from astropy.time import Time
 from erfa import ErfaWarning
 from pyglet import gl, text
 from pyglet.gl.glu import gluProject
+from pyglet.window import mouse
 from trimesh.viewer.trackball import Trackball
 from trimesh.viewer.windowed import SceneViewer
 
@@ -197,7 +198,7 @@ class EarthCenteredViewer(SceneViewer):
 
     @override
     def on_mouse_press(self, x: int, y: int, buttons: int, modifiers: int) -> None:
-        if buttons == pyglet.window.mouse.LEFT and self._pointing_target_button_contains(x, y):
+        if buttons == mouse.LEFT and self._pointing_target_button_contains(x, y):
             self._state["pointing_target_button_active"] = True
             self._cycle_pointing_target()
             return

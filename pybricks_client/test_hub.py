@@ -27,14 +27,9 @@ async def test_motors(hub: MoveHub) -> None:
         await motor.stop()
         angle_after = await motor.angle()
         delta = angle_after - angle_before
-        print(
-            f"  Port {motor.port.name}: angle {angle_before} -> {angle_after}"
-            f" (delta={delta})"
-        )
+        print(f"  Port {motor.port.name}: angle {angle_before} -> {angle_after} (delta={delta})")
         if delta == 0:
-            raise RuntimeError(
-                f"Motor on port {motor.port.name} did not move (angle unchanged)"
-            )
+            raise RuntimeError(f"Motor on port {motor.port.name} did not move (angle unchanged)")
 
 
 async def test_light(hub: MoveHub) -> None:

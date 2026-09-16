@@ -1,7 +1,5 @@
 import asyncio
 
-from pybricks.parameters import Port
-
 from navigator.navigator_main import PAN_DUTY_LIMIT, TILT_DUTY_LIMIT, calibrate_motors, get_motors
 from pybricks_client import MoveHub
 
@@ -31,7 +29,6 @@ async def motion_range(upload_program: bool = False) -> None:
             tilt_angle = await motor_tilt.angle()
             print(f"Tilt motor angle: {tilt_angle} degrees.")
             await asyncio.sleep(3)
-
 
             await motor_pan.run_target(PAN_DUTY_LIMIT, target_angle=340)
             pan_angle = await motor_pan.angle()
