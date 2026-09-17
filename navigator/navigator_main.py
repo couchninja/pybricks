@@ -19,6 +19,7 @@ from navigator.web_viewer_build import build_web_viewer_if_ready
 from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import PointingTarget
+from simulate.astronomy.simulation_clock import simulation_time
 from simulate.astronomy.utils.ephemeris import (
     current_time,
     observer_surface_vector_and_euler_angles_for_target,
@@ -90,7 +91,8 @@ async def run_target_or_warn(motor: Motor, speed: float, target_angle: float, la
 
 
 def pointing_would_move(target: PointingTarget) -> bool:
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
+    time = simulation_time()
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(time, target)
     yaw = clamp_yaw(yaw)
     pitch = clamp_pitch(pitch)
     pan_last = _last_target_angles.get(Port.A.name)
@@ -104,7 +106,8 @@ async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
     print(f"Pointing at target: {target.label}")
     motor_pan, motor_tilt = get_motors(hub)
 
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
+    time = simulation_time()
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(time, target)
 
     print(f"Raw yaw: {yaw:.1f} degrees. Pitch: {pitch:.1f} degrees.")
     yaw = clamp_yaw(yaw)

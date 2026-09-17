@@ -2,8 +2,10 @@ import json
 
 import pytest
 
+from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.simulation_clock import (
     TIME_SCALE_ONE_DAY_PER_SECOND,
+    TIME_SCALE_ONE_HOUR_PER_SECOND,
     reset_simulation_clock,
     set_time_scale_preset,
     set_time_scaling,
@@ -11,6 +13,7 @@ from simulate.astronomy.simulation_clock import (
     time_scale_status_payload,
     time_scaling,
 )
+from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
 
 
 def test_time_scale_status_json_serializable() -> None:
@@ -29,6 +32,14 @@ def test_sync_to_realtime_resets_scale() -> None:
     set_time_scaling(3600.0)
     sync_to_realtime()
     assert time_scaling() == 1.0
+
+
+def test_scene_snapshot_honors_time_scale_preset() -> None:
+    reset_web_scene_cache()
+    set_time_scale_preset("hour")
+    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
+    assert payload["time_iso"]
+    assert time_scaling() == TIME_SCALE_ONE_HOUR_PER_SECOND
 
 
 def test_unknown_preset_raises() -> None:

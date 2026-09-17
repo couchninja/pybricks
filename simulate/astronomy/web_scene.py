@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 import trimesh
-from astropy import units as u
 from astropy.time import Time
 from trimesh.transformations import transform_points
 
@@ -24,6 +23,12 @@ from simulate.astronomy.earth_sun_scene import (
     EarthSunAnimationState,
     build_earth_sun_scene,
     update_earth_sun_scene,
+)
+from simulate.astronomy.simulation_clock import (
+    reanchor_wall_clock,
+    reset_simulation_clock,
+    simulation_time,
+    time_scaling,
 )
 from simulate.astronomy.utils.camera import camera_clip_planes
 from simulate.astronomy.utils.ephemeris import current_time
@@ -64,28 +69,27 @@ _cache = _WebSceneCache()
 def reset_web_scene_cache() -> None:
     _cache.scene = None
     _cache.animation = None
+    reset_simulation_clock()
 
 
-def scene_snapshot_payload(
-    pointing_target: PointingTarget,
-    *,
-    time_scaling: float = 1.0,
-) -> dict[str, Any]:
-    scene = _ensure_scene(time_scaling)
+def scene_snapshot_payload(pointing_target: PointingTarget) -> dict[str, Any]:
+    scene = _ensure_scene()
     scene.metadata["pointing_target"] = pointing_target
     _advance_animation(scene)
     return _serialize_scene(scene, pointing_target)
 
 
-def _ensure_scene(time_scaling: float) -> trimesh.Scene:
+def _ensure_scene() -> trimesh.Scene:
     if _cache.scene is None:
-        start = current_time()
+        start = simulation_time()
         scene = build_earth_sun_scene(start)
+        reanchor_wall_clock()
+        start = simulation_time()
         scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
             start_time=start,
             last_orbit_time=None,
             last_iss_tle_refresh=perf_counter(),
-            time_scaling=time_scaling,
+            time_scaling=time_scaling(),
             wall_start=None,
             current_time=start,
         )
@@ -93,11 +97,6 @@ def _ensure_scene(time_scaling: float) -> trimesh.Scene:
         _cache.animation = scene.metadata["earth_sun_animation"]
         return scene
 
-    animation = _cache.animation
-    if animation is not None and animation["time_scaling"] != time_scaling:
-        animation["time_scaling"] = time_scaling
-        animation["wall_start"] = perf_counter()
-        animation["start_time"] = animation["current_time"] or current_time()
     return _cache.scene
 
 
@@ -110,9 +109,9 @@ def _advance_animation(scene: trimesh.Scene) -> None:
     if last_iss_tle_refresh is None or now - last_iss_tle_refresh >= ISS_TLE_REFRESH_INTERVAL_S:
         refresh_iss_tle()
         animation["last_iss_tle_refresh"] = now
-    elapsed = now - animation["wall_start"]
-    time = animation["start_time"] + elapsed * animation["time_scaling"] * u.second
+    time = simulation_time()
     animation["current_time"] = time
+    animation["time_scaling"] = time_scaling()
     camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
     animation["last_orbit_time"] = update_earth_sun_scene(
         scene,
