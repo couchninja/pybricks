@@ -88,3 +88,17 @@ def test_scene_snapshot_includes_arrow_mesh_length() -> None:
     assert observer_arrow["distance_anchor"] == "observer"
     assert len(observer_arrow["base"]) == 3
     assert len(observer_arrow["direction"]) == 3
+
+
+def test_observer_velocity_arrow_shaft_starts_beyond_observer_marker() -> None:
+    reset_web_scene_cache()
+    from simulate.astronomy.constants import OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE
+
+    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
+    observer = next(body for body in payload["bodies"] if body["name"] == "observer")
+    observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
+    observer_position = np.array(observer["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    arrow_base = np.array(observer_arrow["base"], dtype=float)
+    gap = np.linalg.norm(arrow_base - observer_position)
+    expected_gap = OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE * observer["radius"]
+    assert np.isclose(gap, expected_gap, rtol=1e-6, atol=0.0)

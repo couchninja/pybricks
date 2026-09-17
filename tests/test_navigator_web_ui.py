@@ -8,6 +8,7 @@ from navigator.web_ui import (
     LogBuffer,
     _index_html,
     _status_payload,
+    _viewer_asset,
     begin_navigator_session,
     capture_stdout,
     navigator_session_id,
@@ -59,6 +60,18 @@ def test_status_payload_json_serializable(menu_without_gpio: HostButtonMenu) -> 
 def test_web_port_differs_on_darwin() -> None:
     assert web_port_for_platform("darwin") == 18765
     assert web_port_for_platform("linux") == 8765
+
+
+def test_viewer_asset_serves_earth_texture_from_dist() -> None:
+    asset = _viewer_asset("/textures/land_shallow_topo_2048.jpg")
+    assert asset is not None
+    body, content_type = asset
+    assert content_type == "image/jpeg"
+    assert len(body) > 100_000
+
+
+def test_viewer_asset_rejects_path_traversal() -> None:
+    assert _viewer_asset("/textures/../web_ui.py") is None
 
 
 def test_navigator_session_changes_each_run() -> None:

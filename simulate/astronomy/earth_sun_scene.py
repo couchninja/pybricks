@@ -68,6 +68,7 @@ from simulate.astronomy.constants import (
     OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII,
+    OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE,
     ORBIT_UPDATE_INTERVAL,
     ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
@@ -434,18 +435,24 @@ def _velocity_arrow_length_au(camera_distance_au: float) -> float:
     )
 
 
+def _observer_velocity_arrow_shaft_start_au() -> float:
+    return OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE * OBSERVER_MARKER_EARTH_RADII * EARTH_RADIUS_AU
+
+
 def _direction_arrow_transform(
     origin: np.ndarray,
     direction: np.ndarray,
     camera_distance_au: float,
+    shaft_start_au: float = 0.0,
 ) -> np.ndarray:
     mesh_length = _velocity_arrow_mesh_length_au()
     arrow_length = _velocity_arrow_length_au(camera_distance_au)
     scale = arrow_length / mesh_length
     rotation = _rotation_align_z_to(direction)
+    unit = direction / np.linalg.norm(direction)
     matrix = np.eye(4)
     matrix[:3, :3] = rotation * scale
-    matrix[:3, 3] = origin
+    matrix[:3, 3] = origin + unit * shaft_start_au
     return matrix
 
 
@@ -459,7 +466,12 @@ def _observer_velocity_arrow_transform(
     if direction is None:
         return _transform_matrix(np.eye(3), observer_position)
 
-    return _direction_arrow_transform(observer_position, direction, camera_distance_au)
+    return _direction_arrow_transform(
+        observer_position,
+        direction,
+        camera_distance_au,
+        shaft_start_au=_observer_velocity_arrow_shaft_start_au(),
+    )
 
 
 def _cmb_dipole_arrow_transform(

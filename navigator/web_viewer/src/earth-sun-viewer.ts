@@ -17,6 +17,11 @@ const VIEWER_TARGET_FPS = 60;
 const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
 
 const LABEL_OFFSET_BODY_RADII = 2.5;
+const SELF_LIT_BODY_EMISSIVE_INTENSITY: Partial<Record<string, number>> = {
+  sun: 0.65,
+  observer: 0.45,
+  iss: 0.45,
+};
 const BODY_LABEL_COLORS: Record<string, string> = {
   sun: "rgb(255, 210, 60)",
   earth: "rgb(255, 255, 255)",
@@ -36,17 +41,26 @@ function matrixFromSnapshot(values: number[]): THREE.Matrix4 {
   return matrix;
 }
 
-function createSphereMesh(radius: number, color: Rgb): THREE.Mesh {
+function createSphereMesh(radius: number, color: Rgb, emissiveIntensity = 0): THREE.Mesh {
   const geometry = new THREE.IcosahedronGeometry(radius, 3);
+  const threeColor = rgbToThree(color);
   const material = new THREE.MeshStandardMaterial({
-    color: rgbToThree(color),
+    color: threeColor,
     roughness: 0.75,
+    ...(emissiveIntensity > 0
+      ? { emissive: threeColor.clone(), emissiveIntensity }
+      : {}),
   });
   return new THREE.Mesh(geometry, material);
 }
 
-const ARROW_HEAD_LENGTH_FRACTION = 0.35;
+const ARROW_HEAD_LENGTH_FRACTION = 0.18;
 const ARROW_HEAD_RADIUS_EARTH_RADII = 0.12;
+const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.04;
+const ARROW_EMISSIVE_INTENSITY = 0.45;
+const ARROW_OCCLUDED_OPACITY = 0.45;
+const ARROW_OCCLUDED_RENDER_ORDER = 1;
+const ARROW_VISIBLE_RENDER_ORDER = 2;
 /** Web view: longer than desktop so the arrow stays readable when zoomed out. */
 const ARROW_LENGTH_BOOST = 2.5;
 type ArrowFrame = {
@@ -57,11 +71,74 @@ type ArrowFrame = {
   displayLengthAu: number;
 };
 
-function disposeArrowHelper(arrow: THREE.ArrowHelper): void {
-  arrow.line.geometry.dispose();
-  (arrow.line.material as THREE.Material).dispose();
-  arrow.cone.geometry.dispose();
-  (arrow.cone.material as THREE.Material).dispose();
+function addArrowPart(
+  group: THREE.Group,
+  geometry: THREE.BufferGeometry,
+  positionY: number,
+  visibleMaterial: THREE.Material,
+  occludedMaterial: THREE.Material,
+): void {
+  const visible = new THREE.Mesh(geometry, visibleMaterial);
+  visible.position.y = positionY;
+  visible.renderOrder = ARROW_VISIBLE_RENDER_ORDER;
+  group.add(visible);
+
+  const occluded = new THREE.Mesh(geometry, occludedMaterial);
+  occluded.position.y = positionY;
+  occluded.renderOrder = ARROW_OCCLUDED_RENDER_ORDER;
+  group.add(occluded);
+}
+
+function createSceneArrow(
+  direction: THREE.Vector3,
+  origin: THREE.Vector3,
+  length: number,
+  color: THREE.Color,
+  headLength: number,
+  headRadius: number,
+  shaftRadius: number,
+): THREE.Group {
+  const group = new THREE.Group();
+  const visibleMaterial = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color.clone(),
+    emissiveIntensity: ARROW_EMISSIVE_INTENSITY,
+    roughness: 0.75,
+  });
+  const occludedMaterial = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: ARROW_OCCLUDED_OPACITY,
+    depthTest: true,
+    depthFunc: THREE.GreaterDepth,
+    depthWrite: false,
+  });
+  const shaftLength = length - headLength;
+  const shaftGeometry = new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 12);
+  addArrowPart(group, shaftGeometry, shaftLength / 2, visibleMaterial, occludedMaterial);
+  const headGeometry = new THREE.ConeGeometry(headRadius, headLength, 12);
+  addArrowPart(group, headGeometry, shaftLength + headLength / 2, visibleMaterial, occludedMaterial);
+  group.position.copy(origin);
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  return group;
+}
+
+function disposeSceneArrow(group: THREE.Group): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  for (const child of group.children) {
+    if (!(child instanceof THREE.Mesh)) {
+      continue;
+    }
+    geometries.add(child.geometry);
+    materials.add(child.material as THREE.Material);
+  }
+  for (const geometry of geometries) {
+    geometry.dispose();
+  }
+  for (const material of materials) {
+    material.dispose();
+  }
 }
 
 function cameraDistanceForArrow(
@@ -108,9 +185,10 @@ export class EarthSunViewer {
   private readonly controls: OrbitControls;
   private readonly bodies = new Map<string, BodyEntry>();
   private readonly paths = new Map<string, PathEntry>();
-  private readonly arrows = new Map<string, THREE.ArrowHelper>();
+  private readonly arrows = new Map<string, THREE.Group>();
   private readonly arrowFrames = new Map<string, ArrowFrame>();
   private readonly galacticCenter = new THREE.Vector3();
+  private readonly sunPointLight: THREE.PointLight;
   private readonly observerPosition = new THREE.Vector3();
   private readonly defaultCameraOffset = new THREE.Vector3(0, 0, 1);
   private readonly constellationSky = createConstellationSky(1);
@@ -180,10 +258,9 @@ export class EarthSunViewer {
       this.layoutArrows();
     });
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
-    const sunLight = new THREE.DirectionalLight(0xfff2cc, 1.1);
-    sunLight.position.set(3, 2, 4);
-    this.scene.add(ambient, sunLight);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    this.sunPointLight = new THREE.PointLight(0xfff2cc, 2.5, 0, 2);
+    this.scene.add(ambient, this.sunPointLight);
 
     window.addEventListener("resize", this.onResize);
     this.onResize();
@@ -268,7 +345,13 @@ export class EarthSunViewer {
           (mesh as THREE.Mesh).geometry.dispose();
         });
       const mesh =
-        body.name === "earth" ? createEarthMesh(body.radius) : createSphereMesh(body.radius, body.color);
+        body.name === "earth"
+          ? createEarthMesh(body.radius)
+          : createSphereMesh(
+              body.radius,
+              body.color,
+              SELF_LIT_BODY_EMISSIVE_INTENSITY[body.name] ?? 0,
+            );
       entry.root.add(mesh);
       entry.radius = body.radius;
     }
@@ -281,6 +364,9 @@ export class EarthSunViewer {
     }
     if (body.name === "galactic_center") {
       this.galacticCenter.setFromMatrixPosition(entry.root.matrix);
+    }
+    if (body.name === "sun") {
+      this.sunPointLight.position.setFromMatrixPosition(entry.root.matrix);
     }
   }
 
@@ -362,22 +448,24 @@ export class EarthSunViewer {
       const existing = this.arrows.get(name);
       if (existing) {
         this.scene.remove(existing);
-        disposeArrowHelper(existing);
+        disposeSceneArrow(existing);
       }
 
       const sizeScale = displayLength / this.arrowMeshLengthAu;
       const headLength = displayLength * ARROW_HEAD_LENGTH_FRACTION;
-      const headWidth = 2 * ARROW_HEAD_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
-      const helper = new THREE.ArrowHelper(
+      const headRadius = ARROW_HEAD_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+      const shaftRadius = ARROW_SHAFT_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+      const arrow = createSceneArrow(
         frame.direction,
         frame.base,
         displayLength,
         rgbToThree(frame.color),
         headLength,
-        headWidth,
+        headRadius,
+        shaftRadius,
       );
-      this.scene.add(helper);
-      this.arrows.set(name, helper);
+      this.scene.add(arrow);
+      this.arrows.set(name, arrow);
     }
   }
 

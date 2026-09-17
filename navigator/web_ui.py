@@ -522,7 +522,7 @@ def _viewer_asset(path: str) -> tuple[bytes, str] | None:
     if not path.startswith("/"):
         return None
     relative = path.lstrip("/")
-    if relative != "viewer.js" and not relative.startswith("viewer."):
+    if not relative or any(part == ".." for part in relative.split("/")):
         return None
     file_path = (_VIEWER_DIST / relative).resolve()
     dist_root = _VIEWER_DIST.resolve()
