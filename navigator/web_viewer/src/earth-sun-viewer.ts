@@ -196,8 +196,10 @@ export class EarthSunViewer {
   private arrowEarthRadiusAu = 0;
   private arrowLengthCameraFraction = 0.05;
   private arrowMinLengthAu = 0;
+  private readonly canvasHost: HTMLDivElement;
   private readonly captionEl: HTMLDivElement;
   private readonly fpsEl: HTMLDivElement;
+  private resizeObserver: ResizeObserver | null = null;
   private defaultCameraDistance = 1;
   private earthRadiusAu = 1;
   private earthOrbitRadiusAu = 1;
@@ -219,17 +221,17 @@ export class EarthSunViewer {
     this.root.className = "earth-sun-viewer";
     mount.appendChild(this.root);
 
-    const canvasHost = document.createElement("div");
-    canvasHost.className = "earth-sun-viewer-canvas";
-    this.root.appendChild(canvasHost);
+    this.canvasHost = document.createElement("div");
+    this.canvasHost.className = "earth-sun-viewer-canvas";
+    this.root.appendChild(this.canvasHost);
 
     this.captionEl = document.createElement("div");
     this.captionEl.className = "earth-sun-viewer-caption";
-    canvasHost.appendChild(this.captionEl);
+    this.canvasHost.appendChild(this.captionEl);
 
     this.fpsEl = document.createElement("div");
     this.fpsEl.className = "earth-sun-viewer-fps";
-    canvasHost.appendChild(this.fpsEl);
+    this.canvasHost.appendChild(this.fpsEl);
 
     this.scene = new THREE.Scene();
     this.scene.add(this.constellationSky.root);
@@ -239,13 +241,13 @@ export class EarthSunViewer {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    canvasHost.appendChild(this.renderer.domElement);
+    this.canvasHost.appendChild(this.renderer.domElement);
 
     this.labelRenderer = new CSS2DRenderer();
     this.labelRenderer.domElement.style.position = "absolute";
     this.labelRenderer.domElement.style.inset = "0";
     this.labelRenderer.domElement.style.pointerEvents = "none";
-    canvasHost.appendChild(this.labelRenderer.domElement);
+    this.canvasHost.appendChild(this.labelRenderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -262,7 +264,10 @@ export class EarthSunViewer {
     this.sunPointLight = new THREE.PointLight(0xfff2cc, 2.5, 0, 2);
     this.scene.add(ambient, this.sunPointLight);
 
-    window.addEventListener("resize", this.onResize);
+    this.resizeObserver = new ResizeObserver(() => {
+      this.onResize();
+    });
+    this.resizeObserver.observe(this.canvasHost);
     this.onResize();
     this.animate();
   }
@@ -273,7 +278,8 @@ export class EarthSunViewer {
 
   dispose(): void {
     cancelAnimationFrame(this.animationId);
-    window.removeEventListener("resize", this.onResize);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.renderer.dispose();
     this.root.remove();
   }
@@ -541,12 +547,11 @@ export class EarthSunViewer {
   }
 
   private onResize = (): void => {
-    const host = this.renderer.domElement.parentElement;
-    if (!host) {
+    const width = this.canvasHost.clientWidth;
+    const height = this.canvasHost.clientHeight;
+    if (width <= 0 || height <= 0) {
       return;
     }
-    const width = host.clientWidth;
-    const height = host.clientHeight;
     this.camera.aspect = width / Math.max(height, 1);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);

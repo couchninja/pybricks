@@ -77,12 +77,17 @@ _INDEX_HTML = """<!DOCTYPE html>
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
+    html {
+      height: 100%;
+    }
     body {
       margin: 0;
       padding: 0;
       background: var(--bg);
       color: var(--text);
-      min-height: 100dvh;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
       box-sizing: border-box;
     }
     .app-shell {
@@ -90,12 +95,16 @@ _INDEX_HTML = """<!DOCTYPE html>
       flex-direction: row;
       align-items: stretch;
       gap: 1rem;
-      min-height: 100dvh;
+      height: 100%;
+      min-height: 0;
+      max-height: 100%;
+      overflow: hidden;
     }
     .app-controls {
       flex: 0 0 auto;
       width: fit-content;
       max-width: 100%;
+      min-height: 0;
       overflow-y: auto;
       padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
         max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
@@ -105,9 +114,10 @@ _INDEX_HTML = """<!DOCTYPE html>
     .app-viewer {
       flex: 1 1 0;
       min-width: 0;
-      min-height: 280px;
+      min-height: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     #viewer-root {
       flex: 1 1 auto;
@@ -121,10 +131,12 @@ _INDEX_HTML = """<!DOCTYPE html>
       }
       .app-controls {
         width: 100%;
+        flex: 1 1 auto;
       }
       .app-viewer {
         order: -1;
-        min-height: 42vh;
+        flex: 0 1 42vh;
+        max-height: 42vh;
       }
     }
     .target {
