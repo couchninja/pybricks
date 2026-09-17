@@ -76,6 +76,19 @@ async def run_target_or_warn(motor: Motor, speed: float, target_angle: float, la
     print(f"{label} motor: moving to {target_angle:.1f}°")
 
 
+def pointing_would_move(target: PointingTarget) -> bool:
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
+        current_time(), target
+    )
+    yaw = clamp_yaw(yaw)
+    pitch = clamp_pitch(pitch)
+    pan_last = _last_target_angles.get(Port.A.name)
+    tilt_last = _last_target_angles.get(EXTERNAL_MOTOR_PORT.name)
+    if pan_last is None or abs(yaw - pan_last) >= MIN_TARGET_ANGLE_DELTA:
+        return True
+    return tilt_last is None or abs(pitch - tilt_last) >= MIN_TARGET_ANGLE_DELTA
+
+
 async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
     print(f"Pointing at target: {target.label}")
     motor_pan, motor_tilt = get_motors(hub)
@@ -118,8 +131,10 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
     sensor = hub.color_distance_sensor(SENSOR_PORT)
     try:
         while True:
-            async with buttons.blinking_selected():
-                await point_selected(hub, sensor, buttons.selected_button)
+            button = buttons.selected_button
+            if pointing_would_move(button["target"]):
+                async with buttons.blinking_selected():
+                    await point_selected(hub, sensor, button)
             await buttons.wait_for_selection(timeout_s=INACTIVITY_REFRESH_S)
     finally:
         with suppress(*RECOVERABLE_ERRORS):
