@@ -9,9 +9,11 @@ env = { PYTHONPATH = "." }
 
 [tasks]
 viewer = "python simulate/astronomy/viewer.py"
+web-viewer-build = { cmd = "npm run build", cwd = "navigator/web_viewer" }
+web-viewer-install = { cmd = "npm install", cwd = "navigator/web_viewer" }
 viewer-watch = "python -m watchfiles --filter python \"python simulate/astronomy/viewer.py\" simulate/astronomy/"
 nav = "python -u navigator/navigator_main.py"
-nav-watch = "python -m watchfiles --filter python \"python navigator/navigator_main.py\" navigator/ gpio/"
+nav-watch = "python -m watchfiles --ignore-paths navigator/web_viewer/dist,navigator/web_viewer/node_modules --grace-period 2 \"python -u navigator/navigator_main.py\" navigator/ gpio/ simulate/"
 nav-service-autostart = "bash systemd/install-navigator-service.sh"
 nav-service-autostart-off = "sudo systemctl disable --now navigator && sudo rm -f /etc/logrotate.d/navigator"
 nav-service-start = "sudo systemctl start navigator"

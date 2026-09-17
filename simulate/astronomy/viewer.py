@@ -31,16 +31,12 @@ from trimesh.viewer.windowed import SceneViewer
 from simulate.astronomy.constants import (
     ANIMATION_CALLBACK_PERIOD,
     CAMERA_DISTANCE_EARTH_RADII,
-    CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER,
-    CAMERA_Z_NEAR_EARTH_RADII,
     EARTH_CENTER_ORIGIN,
     EARTH_RADIUS_AU,
     FPS_LABEL_MARGIN,
     LABEL_FONT_SIZE,
     LABEL_OFFSET_BODY_RADII,
     LINE_WIDTH_PIXELS,
-    MAX_DEPTH_RATIO,
-    OPENGL_Z_NEAR_MIN_AU,
     POINTING_TARGET_BUTTON_HEIGHT,
     POINTING_TARGET_BUTTON_MARGIN,
     POINTING_TARGET_BUTTON_WIDTH,
@@ -53,7 +49,7 @@ from simulate.astronomy.earth_sun_scene import (
     build_earth_sun_scene,
     earth_sun_animation_callback,
 )
-from simulate.astronomy.utils.camera import camera_distance_au
+from simulate.astronomy.utils.camera import camera_clip_planes
 from simulate.astronomy.utils.ephemeris import current_time
 
 try:
@@ -248,7 +244,7 @@ class EarthCenteredViewer(SceneViewer):
         ``reset_view`` in ``super().__init__`` the clip values are set but
         ``gluPerspective`` waits until the first real resize/draw.
         """
-        z_near, z_far = _camera_clip_planes(self.scene)
+        z_near, z_far = camera_clip_planes(self.scene)
         if z_near == self.scene.camera.z_near and z_far == self.scene.camera.z_far:
             return
         self.scene.camera.z_near = z_near
@@ -406,21 +402,6 @@ class EarthCenteredViewer(SceneViewer):
         next_target = targets[(targets.index(current_target) + 1) % len(targets)]
         self.scene.metadata["pointing_target"] = next_target
         self.scene._redraw()
-
-
-def _camera_clip_planes(scene: trimesh.Scene) -> tuple[float, float]:
-    camera_distance = camera_distance_au(scene)
-    try:
-        scene_scale = float(scene.scale)
-    except Exception:
-        scene_scale = 1.0
-    z_far = camera_distance + scene_scale * CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER
-    z_near = max(
-        EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII,
-        z_far / MAX_DEPTH_RATIO,
-        OPENGL_Z_NEAR_MIN_AU,
-    )
-    return z_near, z_far
 
 
 def _label_root_position(scene: trimesh.Scene, node_name: str) -> np.ndarray:

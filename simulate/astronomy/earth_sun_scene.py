@@ -441,7 +441,7 @@ def _direction_arrow_transform(
     rotation = _rotation_align_z_to(direction)
     matrix = np.eye(4)
     matrix[:3, :3] = rotation * scale
-    matrix[:3, 3] = origin + direction * (arrow_length / 2)
+    matrix[:3, 3] = origin
     return matrix
 
 

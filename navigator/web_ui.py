@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import sys
+import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from astropy import units as u
@@ -15,14 +18,34 @@ from simulate.astronomy.utils.ephemeris import (
     current_time,
     observer_surface_vector_and_euler_angles_for_target,
 )
+from simulate.astronomy.web_scene import scene_snapshot_payload
 
 if TYPE_CHECKING:
     from gpio.button_menu import ButtonMenu
+    from gpio.button_menu_host import HostButtonMenu
+
+    ButtonTargetSource = ButtonMenu | HostButtonMenu
+else:
+    ButtonTargetSource = object
 
 WEB_HOST = "0.0.0.0"
-WEB_PORT = 8765
+WEB_PORT_LINUX = 8765
+WEB_PORT_DARWIN = 18765
+
+
+def web_port_for_platform(platform: str) -> int:
+    # Cursor often binds localhost:8765 on macOS; use a distinct port for local dev.
+    if platform == "darwin":
+        return WEB_PORT_DARWIN
+    return WEB_PORT_LINUX
+
+
+WEB_PORT = web_port_for_platform(sys.platform)
 LOG_LINE_LIMIT = 200
 _STATUS_POLL_MS = 2000
+_VIEWER_DIST = Path(__file__).resolve().parent / "web_viewer" / "dist"
+_SESSION_POLL_MS = 1000
+_navigator_session_id: str | None = None
 
 _BODY_TARGETS = frozenset(
     {
@@ -60,6 +83,7 @@ _INDEX_HTML = """<!DOCTYPE html>
       min-height: 100dvh;
     }
     h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; color: var(--muted); }
+    #viewer-root { min-height: 42vh; }
     .target {
       font-size: clamp(1.75rem, 6vw, 2.25rem);
       font-weight: 700;
@@ -103,6 +127,8 @@ _INDEX_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <h1>Navigator</h1>
+  <div id="viewer-root"></div>
+  <script type="module" src="__VIEWER_SCRIPT__"></script>
   <div class="target" id="target">—</div>
   <div class="speed" id="speed"></div>
   <button type="button" class="cycle" id="cycle">Next target</button>
@@ -139,10 +165,31 @@ _INDEX_HTML = """<!DOCTYPE html>
 
     refresh();
     setInterval(refresh, __POLL_MS__);
+
+    let navigatorSession = null;
+    async function pollNavigatorSession() {
+      try {
+        const res = await fetch("/api/navigator-session");
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        if (navigatorSession === null) {
+          navigatorSession = data.session;
+          return;
+        }
+        if (data.session !== navigatorSession) {
+          location.reload();
+        }
+      } catch {
+      }
+    }
+    pollNavigatorSession();
+    setInterval(pollNavigatorSession, __SESSION_POLL_MS__);
   </script>
 </body>
 </html>
-""".replace("__POLL_MS__", str(_STATUS_POLL_MS))
+"""
 
 
 class LogBuffer:
@@ -191,11 +238,35 @@ def capture_stdout(log_buffer: LogBuffer) -> Iterator[None]:
         sys.stdout = original
 
 
-def _status_payload(buttons: ButtonMenu, log_buffer: LogBuffer) -> dict[str, object]:
-    target = buttons.selected_button["target"]
-    _surface, _euler, speed_au_s = observer_surface_vector_and_euler_angles_for_target(
-        current_time(), target
+def begin_navigator_session() -> str:
+    global _navigator_session_id
+    _navigator_session_id = uuid.uuid4().hex
+    return _navigator_session_id
+
+
+def navigator_session_id() -> str:
+    if _navigator_session_id is None:
+        begin_navigator_session()
+    assert _navigator_session_id is not None
+    return _navigator_session_id
+
+
+def _index_html() -> str:
+    session = navigator_session_id()
+    return (
+        _INDEX_HTML.replace("__VIEWER_SCRIPT__", f"/viewer.js?v={session}")
+        .replace("__POLL_MS__", str(_STATUS_POLL_MS))
+        .replace("__SESSION_POLL_MS__", str(_SESSION_POLL_MS))
     )
+
+
+def _request_path(path: str) -> str:
+    return path.split("?", 1)[0]
+
+
+def _status_payload(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> dict[str, object]:
+    target = buttons.selected_button["target"]
+    _surface, _euler, speed_au_s = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
     speed_km_h: float | None = None
     if target not in _BODY_TARGETS:
         speed_km_s = speed_au_s * (1 * u.au).to_value(u.km)
@@ -218,33 +289,76 @@ async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str]:
     return method, path
 
 
-def _http_response(status: int, body: bytes, content_type: str) -> bytes:
+def _viewer_asset(path: str) -> tuple[bytes, str] | None:
+    path = _request_path(path)
+    if not path.startswith("/"):
+        return None
+    relative = path.lstrip("/")
+    if relative != "viewer.js" and not relative.startswith("viewer."):
+        return None
+    file_path = (_VIEWER_DIST / relative).resolve()
+    dist_root = _VIEWER_DIST.resolve()
+    if not str(file_path).startswith(str(dist_root)) or not file_path.is_file():
+        return None
+    content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return file_path.read_bytes(), content_type
+
+
+def _http_response(
+    status: int,
+    body: bytes,
+    content_type: str,
+    *,
+    extra_headers: dict[str, str] | None = None,
+) -> bytes:
     reason = {200: "OK", 204: "No Content", 404: "Not Found", 405: "Method Not Allowed"}[status]
-    header = (
-        f"HTTP/1.1 {status} {reason}\r\n"
-        f"Content-Type: {content_type}\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    )
+    header = f"HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n"
+    for key, value in (extra_headers or {}).items():
+        header += f"{key}: {value}\r\n"
+    header += "Connection: close\r\n\r\n"
     return header.encode("ascii") + body
 
 
 async def _handle_client(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
-    buttons: ButtonMenu,
+    buttons: ButtonTargetSource,
     log_buffer: LogBuffer,
 ) -> None:
     try:
         method, path = await _read_request(reader)
-        if path == "/" and method == "GET":
-            body = _INDEX_HTML.encode("utf-8")
-            writer.write(_http_response(200, body, "text/html; charset=utf-8"))
-        elif path == "/api/status" and method == "GET":
+        route = _request_path(path)
+        if route == "/" and method == "GET":
+            body = _index_html().encode("utf-8")
+            writer.write(
+                _http_response(
+                    200,
+                    body,
+                    "text/html; charset=utf-8",
+                    extra_headers={"Cache-Control": "no-cache"},
+                )
+            )
+        elif method == "GET" and (asset := _viewer_asset(path)) is not None:
+            body, content_type = asset
+            writer.write(
+                _http_response(
+                    200,
+                    body,
+                    content_type,
+                    extra_headers={"Cache-Control": "no-cache"},
+                )
+            )
+        elif route == "/api/navigator-session" and method == "GET":
+            payload = json.dumps({"session": navigator_session_id()}).encode("utf-8")
+            writer.write(_http_response(200, payload, "application/json"))
+        elif route == "/api/status" and method == "GET":
             payload = json.dumps(_status_payload(buttons, log_buffer)).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json"))
-        elif path == "/api/cycle" and method == "POST":
+        elif route == "/api/scene" and method == "GET":
+            target = buttons.selected_button["target"]
+            payload = json.dumps(scene_snapshot_payload(target)).encode("utf-8")
+            writer.write(_http_response(200, payload, "application/json"))
+        elif route == "/api/cycle" and method == "POST":
             buttons.cycle_pointing_target()
             writer.write(_http_response(204, b"", "text/plain"))
         elif method == "GET":
@@ -260,10 +374,8 @@ async def _handle_client(
 
 
 @asynccontextmanager
-async def run_web_ui(buttons: ButtonMenu, log_buffer: LogBuffer) -> AsyncIterator[None]:
-    async def client_handler(
-        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
+async def run_web_ui(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> AsyncIterator[None]:
+    async def client_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         await _handle_client(reader, writer, buttons, log_buffer)
 
     server = await asyncio.start_server(client_handler, WEB_HOST, WEB_PORT)

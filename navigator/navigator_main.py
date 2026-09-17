@@ -1,12 +1,21 @@
+from __future__ import annotations
+
 import asyncio
+import sys
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from typing import TYPE_CHECKING
 
 from pybricks.parameters import Port
 
-from gpio.button_menu import ButtonData, ButtonMenu, PanelStatus
+from gpio.button_config import ButtonData, PanelStatus
+from gpio.button_menu_host import HostButtonMenu
+
+if TYPE_CHECKING:
+    from gpio.button_menu import ButtonMenu
 from navigator.system_clock import clock_is_synchronized
-from navigator.web_ui import LogBuffer, capture_stdout, run_web_ui
+from navigator.web_ui import LogBuffer, begin_navigator_session, capture_stdout, run_web_ui
+from navigator.web_viewer_build import build_web_viewer_if_ready
 from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import PointingTarget
@@ -81,9 +90,7 @@ async def run_target_or_warn(motor: Motor, speed: float, target_angle: float, la
 
 
 def pointing_would_move(target: PointingTarget) -> bool:
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
-        current_time(), target
-    )
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
     yaw = clamp_yaw(yaw)
     pitch = clamp_pitch(pitch)
     pan_last = _last_target_angles.get(Port.A.name)
@@ -161,9 +168,7 @@ async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonMenu, 
             if hub is None:
                 status.hub = "disconnected"
                 try:
-                    hub = await hub_stack.enter_async_context(
-                        connected_hub(program, panel_status=status)
-                    )
+                    hub = await hub_stack.enter_async_context(connected_hub(program, panel_status=status))
                 except RECOVERABLE_ERRORS as exc:
                     print(f"Connection failed ({format_error(exc)}); searching again...")
                     await asyncio.sleep(RECONNECT_DELAY_S)
@@ -221,11 +226,32 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
             await sensor.light.off()
 
 
+def gpio_available() -> bool:
+    return sys.platform != "darwin"
+
+
+async def run_web_ui_only(buttons: HostButtonMenu, log_buffer: LogBuffer) -> None:
+    print("Navigator web UI (GPIO and hub disabled on macOS)")
+    refresh_astronomy_downloads(allow_network=True)
+    async with run_web_ui(buttons, log_buffer):
+        await asyncio.Event().wait()
+
+
 async def navigator_main(upload_program: bool = False) -> None:
+    build_web_viewer_if_ready()
+    begin_navigator_session()
     print("Navigator main")
+    log_buffer = LogBuffer()
+
+    if not gpio_available():
+        with HostButtonMenu() as buttons, capture_stdout(log_buffer):
+            await run_web_ui_only(buttons, log_buffer)
+        return
+
+    from gpio.button_menu import ButtonMenu
+
     refresh_astronomy_downloads(allow_network=False)
     program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
-    log_buffer = LogBuffer()
 
     with ButtonMenu() as buttons, capture_stdout(log_buffer):
         async with AsyncExitStack() as outer_stack:
