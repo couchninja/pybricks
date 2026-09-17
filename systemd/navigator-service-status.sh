@@ -5,13 +5,21 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 log_file="$repo_root/logs/navigator.log"
 logrotate_conf=/etc/logrotate.d/navigator
 
-systemctl status navigator --no-pager || true
+systemctl --user status navigator --no-pager || true
+
+echo
+echo "--- linger (boot without login) ---"
+if loginctl show-user "$(whoami)" -p Linger --value 2>/dev/null | grep -qx yes; then
+  echo "Enabled for $(whoami)"
+else
+  echo "Not enabled. Run: pixi run nav-service-autostart"
+fi
 
 echo
 echo "--- logrotate ---"
 if [[ ! -f "$logrotate_conf" ]]; then
   echo "Not installed ($logrotate_conf missing)."
-  echo "Install with: pixi run nav-service-autostart"
+  echo "Re-run: pixi run nav-service-autostart"
   exit 0
 fi
 
