@@ -206,6 +206,57 @@ def test_refetches_when_cache_is_stale() -> None:
         assert calls["count"] == 1
 
 
+def test_refetches_when_clock_is_behind_the_cache() -> None:
+    """A clock behind the cache file (Pi booting without an RTC) must not look fresh."""
+    _reset_iss_tle_state()
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_path = Path(tmp) / "iss.tle"
+        cache_path.write_text(_VALID_TLE)
+        future_mtime = time.time() + 10 * 24 * 3600
+        os.utime(cache_path, (future_mtime, future_mtime))
+        calls = {"count": 0}
+
+        def fetch_ok(*_args, **_kwargs):
+            calls["count"] += 1
+            return _VALID_TLE
+
+        with (
+            patch.object(iss_tle, "_CACHE_TLE_PATH", cache_path),
+            patch.object(iss_tle, "ISS_TLE_FETCH_FROM_CELESTRAK", True),
+            patch.object(iss_tle, "_fetch_iss_tle_text", side_effect=fetch_ok),
+        ):
+            iss_tle.resolve_iss_tle_lines()
+        assert calls["count"] == 1
+
+
+def test_reset_network_retry_allows_immediate_refetch() -> None:
+    _reset_iss_tle_state()
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_path = Path(tmp) / "iss.tle"
+        calls = {"count": 0}
+
+        def fetch_offline_then_ok(*_args, **_kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise iss_tle.IssTleNetworkUnavailable("offline")
+            return _VALID_TLE
+
+        with (
+            patch.object(iss_tle, "_CACHE_TLE_PATH", cache_path),
+            patch.object(iss_tle, "_BUNDLED_TLE_PATH", _bundled_tle_path()),
+            patch.object(iss_tle, "ISS_TLE_FETCH_FROM_CELESTRAK", True),
+            patch.object(iss_tle, "_fetch_iss_tle_text", side_effect=fetch_offline_then_ok),
+        ):
+            iss_tle.resolve_iss_tle_lines()
+            iss_tle.resolve_iss_tle_lines()
+            assert calls["count"] == 1, "backoff should block the immediate retry"
+
+            iss_tle.reset_network_retry()
+            _name, line1, _line2 = iss_tle.resolve_iss_tle_lines()
+        assert calls["count"] == 2
+        assert "26259.14303184" in line1
+
+
 def test_url_error_maps_to_network_unavailable() -> None:
     _reset_iss_tle_state()
     with patch("urllib.request.urlopen") as urlopen:

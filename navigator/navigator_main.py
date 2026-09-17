@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pybricks.parameters import Port
 
 from gpio.button_menu import ButtonData, ButtonMenu
+from navigator.system_clock import clock_is_synchronized
 from navigator.web_ui import LogBuffer, capture_stdout, run_web_ui
 from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
@@ -14,8 +15,10 @@ from simulate.astronomy.utils.ephemeris import (
     observer_surface_vector_and_euler_angles_for_target,
 )
 from simulate.astronomy.utils.iss import refresh_iss_tle
+from simulate.astronomy.utils.iss_tle import reset_network_retry
 
 INACTIVITY_REFRESH_S = 10.0
+CLOCK_WAIT_POLL_S = 5.0
 RECONNECT_DELAY_S = 2.0
 PAN_DUTY_LIMIT = 150
 TILT_DUTY_LIMIT = 200
@@ -127,11 +130,38 @@ async def point_selected(hub: MoveHub, sensor: ColorDistanceSensor, button: Butt
     await point_at_target(hub, button["target"])
 
 
+def resume_after_clock_sync() -> None:
+    """Re-arm time-dependent state once the clock jumped to the correct time."""
+    print(f"Clock synchronized (system time {current_time().iso} UTC); resuming pointing.")
+    reset_network_retry()
+    refresh_iss_tle()
+    _last_target_angles.clear()
+
+
 async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
-    """Point at the selected target, then wait for the next press or a refresh."""
+    """Point at the selected target, then wait for the next press or a refresh.
+
+    Pointing is suspended while the clock is unsynchronized, since every angle is
+    derived from the current time. The hub stays connected and the loop keeps
+    polling, so pointing resumes on its own once a time source is reached.
+    """
     sensor = hub.color_distance_sensor(SENSOR_PORT)
+    clock_ready = True
     try:
         while True:
+            if not clock_is_synchronized():
+                if clock_ready:
+                    clock_ready = False
+                    print(
+                        f"Clock not synchronized (system time {current_time().iso} UTC); "
+                        "pointing suspended until the time is correct."
+                    )
+                await buttons.wait_for_selection(timeout_s=CLOCK_WAIT_POLL_S)
+                continue
+            if not clock_ready:
+                clock_ready = True
+                resume_after_clock_sync()
+
             button = buttons.selected_button
             if pointing_would_move(button["target"]):
                 async with buttons.blinking_selected():

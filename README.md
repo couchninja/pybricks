@@ -7,6 +7,13 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
   - can only be set for all of cursor
 
 # raspberry hardware
+## Clock desync
+- The raspberry does not have a battery-backed RTC, meaning that it does not know correct time until internet connection is established.
+**Hardware options for correct time offline**
+| Approach | Accuracy offline | Notes |
+|----------|------------------|-------|
+| **DS3231 I2C RTC** | Good (seconds–minutes after long power-off) | Small module on GPIO I2C; kernel can set time at boot before userspace. Chrony `rtcsync` keeps it updated when online. |
+| **GPS + PPS** | Excellent | Needs sky view; can also supply observer position. |
 ## sudo GPIO
 - In order to use the pins (gpiod) without sudo:
   - ```sudo usermod -aG dialout "$USER"```
@@ -18,7 +25,7 @@ On raspberry + ubuntu, when the agent calls the terminal, the commands would han
   - instead I connected over ethernet
   - and then had to do: "pixi run wifi-off && pixi run wifi-on"
     - perhaps I can run that still connected to wifi
-## Keep it Light
+## Keep it light
 - The raspberry can hang if it is pushed too hard:
   - Cursor plugins: only install python
   - Don't run too many agents simultaneously
@@ -151,22 +158,3 @@ asyncio.run(main())
 - **Upload fails or disconnects**: Run `pixi run hub-stop`, wait a moment, then try `pixi run hub-run` again. The script retries automatically (up to 5 times) and clears stale Bluetooth connections between attempts.
 - **Connection fails immediately**: Power-cycle the hub, make sure no phone/tablet is connected to it, and try again.
 - **Commands time out**: Make sure the hub program is the latest upload (`pixi run hub-run` or reconnect with upload). Close Pybricks Code and other BLE connections to the hub.
-
-
-# known problems
-## Incorrect pointing when navigator starts without internet connectivity
-If the program is started without internet connectivity, the navigator points at incorrect targets.
-I had the hypothesis that the astropy bundeled data was too old but updating that data did not resolve the issue.
-- Perhaps an exception is thrown when no internet is available?
-  - I tried disabling the astropy download with:
-```
-iers_conf.auto_download = False
-iers_conf.auto_max_age = None
-```
-but it did not solve the issue.
-I don't think any part of the project uses internet connection?
-- ISS data download was added after this issue appeared
-It is hard to test since we remote into the raspberry which needs it to be network connected.
-- turn off internet modem for testing?
-- simulate having no internet somehow with os config/python launch flags?
-Having phone hotspot on when booting the raspberry circumvented the issue.

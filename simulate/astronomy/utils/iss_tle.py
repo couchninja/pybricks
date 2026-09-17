@@ -57,6 +57,12 @@ def resolve_iss_tle_lines() -> tuple[str, str, str]:
     return name, line1, line2
 
 
+def reset_network_retry() -> None:
+    """Drop the retry backoff so the next resolve tries CelesTrak again immediately."""
+    global _network_retry_after_monotonic
+    _network_retry_after_monotonic = 0.0
+
+
 def _fetch_iss_tle_text() -> str:
     request = urllib.request.Request(
         ISS_TLE_CELESTRAK_URL,
@@ -110,7 +116,9 @@ def _cached_tle_is_fresh() -> bool:
     if not _CACHE_TLE_PATH.is_file():
         return False
     age_s = time.time() - _CACHE_TLE_PATH.stat().st_mtime
-    return age_s < ISS_TLE_REFRESH_INTERVAL_S
+    # A negative age means the clock is behind the cache file (the Pi boots without
+    # an RTC), which says nothing about freshness: refetch instead of trusting it.
+    return 0.0 <= age_s < ISS_TLE_REFRESH_INTERVAL_S
 
 
 def _read_tle_file(path: Path) -> tuple[str, str, str]:
