@@ -14,8 +14,8 @@ from simulate.astronomy.utils.ephemeris import (
     current_time,
     observer_surface_vector_and_euler_angles_for_target,
 )
-from simulate.astronomy.utils.iss import refresh_iss_tle
-from simulate.astronomy.utils.iss_tle import reset_network_retry
+from simulate.astronomy.utils.iss_tle import set_celestrak_fetch_allowed
+from simulate.astronomy.utils.remote_data import refresh_astronomy_downloads
 
 INACTIVITY_REFRESH_S = 10.0
 CLOCK_WAIT_POLL_S = 5.0
@@ -139,8 +139,7 @@ async def point_selected(hub: MoveHub, sensor: ColorDistanceSensor, button: Butt
 def resume_after_clock_sync() -> None:
     """Re-arm time-dependent state once the clock jumped to the correct time."""
     print(f"Clock synchronized (system time {current_time().iso} UTC); resuming pointing.")
-    reset_network_retry()
-    refresh_iss_tle()
+    refresh_astronomy_downloads(allow_network=True)
     _last_target_angles.clear()
 
 
@@ -179,6 +178,7 @@ async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonMenu, 
                 status.clock_synchronized = False
                 await asyncio.sleep(CLOCK_WAIT_POLL_S)
             status.clock_synchronized = True
+            refresh_astronomy_downloads(allow_network=True)
             await asyncio.sleep(0)
             return hub
 
@@ -197,6 +197,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
             if not clock_is_synchronized():
                 if clock_ready:
                     clock_ready = False
+                    set_celestrak_fetch_allowed(False)
                     print(
                         f"Clock not synchronized (system time {current_time().iso} UTC); "
                         "pointing suspended until the time is correct."
@@ -222,7 +223,7 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
 
 async def navigator_main(upload_program: bool = False) -> None:
     print("Navigator main")
-    refresh_iss_tle()
+    refresh_astronomy_downloads(allow_network=False)
     program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
     log_buffer = LogBuffer()
 

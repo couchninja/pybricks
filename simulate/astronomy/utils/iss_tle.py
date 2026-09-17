@@ -17,6 +17,7 @@ _CACHE_TLE_PATH = Path.home() / ".cache" / "pybricks" / "iss.tle"
 
 _network_retry_after_monotonic = 0.0
 _active_tle_lines: tuple[str, str, str] | None = None
+_celestrak_fetch_allowed = True
 
 
 class IssTleNetworkUnavailable(Exception):
@@ -29,11 +30,20 @@ class IssTleNetworkUnavailable(Exception):
         )
 
 
+def set_celestrak_fetch_allowed(allowed: bool) -> None:
+    """When False, use cache/bundled TLE only (e.g. before clock sync)."""
+    global _celestrak_fetch_allowed
+    _celestrak_fetch_allowed = allowed
+
+
 def resolve_iss_tle_lines() -> tuple[str, str, str]:
     global _network_retry_after_monotonic, _active_tle_lines
 
     if not ISS_TLE_FETCH_FROM_CELESTRAK:
         return _load_fallback_tle_lines("CelesTrak fetch disabled")
+
+    if not _celestrak_fetch_allowed:
+        return _load_fallback_tle_lines("CelesTrak fetch deferred until clock is synchronized")
 
     now = time.monotonic()
     if now < _network_retry_after_monotonic:

@@ -129,14 +129,10 @@ async def test_pointing_starts_immediately_when_clock_is_synchronized() -> None:
 
 def test_resume_after_clock_sync_rearms_time_dependent_state() -> None:
     nav._last_target_angles[Port.A.name] = 123.0
-    with (
-        patch.object(nav, "refresh_iss_tle") as refresh,
-        patch.object(nav, "reset_network_retry") as reset_retry,
-    ):
+    with patch.object(nav, "refresh_astronomy_downloads") as refresh:
         nav.resume_after_clock_sync()
     assert nav._last_target_angles == {}
-    assert refresh.call_count == 1
-    assert reset_retry.call_count == 1
+    refresh.assert_called_once_with(allow_network=True)
 
 
 def test_clock_is_synchronized_matches_kernel_state() -> None:

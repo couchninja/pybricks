@@ -13,7 +13,6 @@ from astropy.coordinates import (
     get_body_barycentric,
 )
 from astropy.time import Time
-from astropy.utils.iers import conf as iers_conf
 from scipy.spatial.transform import Rotation
 
 from simulate.astronomy.constants import (
@@ -28,15 +27,11 @@ from simulate.astronomy.constants import (
     SOLAR_GALACTIC_ORBITAL_SPEED,
     PointingTarget,
 )
+from simulate.astronomy.utils.iers_refresh import configure_iers, ensure_iers_table_loaded
 from simulate.astronomy.utils.iss import iss_geocentric_gcrs_km
 
-# Keep Astropy's default IERS auto-download when online. Offline (or when the
-# download fails), the probe raises ValueError once predictive data is older
-# than auto_max_age; allow the bundled table instead of crashing.
-try:
-    Time.now().ut1
-except ValueError:
-    iers_conf.auto_max_age = None
+configure_iers()
+ensure_iers_table_loaded()
 
 
 _BODY_POINTING_TARGETS = frozenset(

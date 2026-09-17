@@ -24,6 +24,29 @@ def _bundled_tle_path() -> Path:
 def _reset_iss_tle_state() -> None:
     iss_tle._network_retry_after_monotonic = 0.0
     iss_tle._active_tle_lines = None
+    iss_tle.set_celestrak_fetch_allowed(True)
+
+
+def test_fetch_deferred_until_clock_sync() -> None:
+    _reset_iss_tle_state()
+    with tempfile.TemporaryDirectory() as tmp:
+        cache_path = Path(tmp) / "iss.tle"
+        cache_path.write_text(_VALID_TLE)
+        calls = {"count": 0}
+
+        def fetch_ok(*_args, **_kwargs):
+            calls["count"] += 1
+            return _VALID_TLE
+
+        with (
+            patch.object(iss_tle, "_CACHE_TLE_PATH", cache_path),
+            patch.object(iss_tle, "ISS_TLE_FETCH_FROM_CELESTRAK", True),
+            patch.object(iss_tle, "_fetch_iss_tle_text", side_effect=fetch_ok),
+        ):
+            iss_tle.set_celestrak_fetch_allowed(False)
+            _name, line1, _line2 = iss_tle.resolve_iss_tle_lines()
+        assert calls["count"] == 0
+        assert "26259.14303184" in line1
 
 
 def test_fetch_disabled_uses_cache_without_network() -> None:
