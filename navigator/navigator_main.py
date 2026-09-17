@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pybricks.parameters import Port
 
 from gpio.button_menu import ButtonData, ButtonMenu
+from navigator.web_ui import LogBuffer, capture_stdout, run_web_ui
 from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
 from pybricks_client.ble import RECOVERABLE_ERRORS, format_error
 from simulate.astronomy.constants import PointingTarget
@@ -145,20 +146,23 @@ async def navigator_main(upload_program: bool = False) -> None:
     print("Navigator main")
     refresh_iss_tle()
     program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
+    log_buffer = LogBuffer()
 
-    with ButtonMenu() as buttons:
-        while True:
-            buttons.reset()
-            try:
-                async with AsyncExitStack() as stack:
-                    async with buttons.blinking_selected():
-                        hub = await stack.enter_async_context(connected_hub(program))
-                        print("Hub connected.")
-                        await calibrate_motors(hub)
-                    await run_selection_loop(hub, buttons)
-            except RECOVERABLE_ERRORS as exc:
-                print(f"Hub lost ({format_error(exc)}); searching again...")
-                await asyncio.sleep(RECONNECT_DELAY_S)
+    with ButtonMenu() as buttons, capture_stdout(log_buffer):
+        async with AsyncExitStack() as outer_stack:
+            await outer_stack.enter_async_context(run_web_ui(buttons, log_buffer))
+            while True:
+                buttons.reset()
+                try:
+                    async with AsyncExitStack() as stack:
+                        async with buttons.blinking_selected():
+                            hub = await stack.enter_async_context(connected_hub(program))
+                            print("Hub connected.")
+                            await calibrate_motors(hub)
+                        await run_selection_loop(hub, buttons)
+                except RECOVERABLE_ERRORS as exc:
+                    print(f"Hub lost ({format_error(exc)}); searching again...")
+                    await asyncio.sleep(RECONNECT_DELAY_S)
 
 
 if __name__ == "__main__":
