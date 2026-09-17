@@ -111,6 +111,8 @@ export class EarthSunViewer {
   private readonly arrows = new Map<string, THREE.ArrowHelper>();
   private readonly arrowFrames = new Map<string, ArrowFrame>();
   private readonly galacticCenter = new THREE.Vector3();
+  private readonly observerPosition = new THREE.Vector3();
+  private readonly defaultCameraOffset = new THREE.Vector3(0, 0, 1);
   private readonly constellationSky = createConstellationSky(1);
   private arrowMeshLengthAu = 0;
   private arrowEarthRadiusAu = 0;
@@ -233,6 +235,7 @@ export class EarthSunViewer {
     this.layoutArrows();
     this.syncClipPlanes();
     this.updateLabels();
+    this.syncOrbitPivot();
     if (!this.hasInitialCamera) {
       this.resetCamera();
       this.hasInitialCamera = true;
@@ -378,6 +381,20 @@ export class EarthSunViewer {
     }
   }
 
+  private syncOrbitPivot(): void {
+    const entry = this.bodies.get("observer");
+    if (!entry) {
+      return;
+    }
+    const next = new THREE.Vector3().setFromMatrixPosition(entry.root.matrix);
+    if (this.hasInitialCamera) {
+      const delta = next.clone().sub(this.observerPosition);
+      this.controls.target.add(delta);
+      this.camera.position.add(delta);
+    }
+    this.observerPosition.copy(next);
+  }
+
   private clampCameraDistance(): void {
     const maxDistance = this.controls.maxDistance;
     if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
@@ -489,8 +506,10 @@ export class EarthSunViewer {
   };
 
   resetCamera(): void {
-    this.controls.target.set(0, 0, 0);
-    this.camera.position.set(0, 0, this.defaultCameraDistance);
+    const distance = this.defaultCameraDistance || 1;
+    this.defaultCameraOffset.set(0, 0, distance);
+    this.controls.target.copy(this.observerPosition);
+    this.camera.position.copy(this.observerPosition).add(this.defaultCameraOffset);
     this.controls.update();
   }
 }

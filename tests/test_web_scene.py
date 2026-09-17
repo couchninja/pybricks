@@ -85,6 +85,6 @@ def test_scene_snapshot_includes_arrow_mesh_length() -> None:
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
     assert payload["arrow_mesh_length_au"] == OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
     observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
-    assert observer_arrow["distance_anchor"] == "earth_center"
+    assert observer_arrow["distance_anchor"] == "observer"
     assert len(observer_arrow["base"]) == 3
     assert len(observer_arrow["direction"]) == 3

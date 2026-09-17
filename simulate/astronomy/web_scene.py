@@ -192,7 +192,7 @@ def _serialize_arrow(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
         direction = (z_axis / z_length).astype(float)
     else:
         direction = np.array([0.0, 0.0, 1.0], dtype=float)
-    distance_anchor = "galactic_center" if node_name == "cmb_dipole_arrow" else "earth_center"
+    distance_anchor = "galactic_center" if node_name == "cmb_dipole_arrow" else "observer"
     return {
         "name": node_name,
         "color": color,
