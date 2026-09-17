@@ -1,0 +1,9 @@
+@REPO_ROOT@/logs/navigator.log {
+    size 10M
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

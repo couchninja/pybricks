@@ -71,7 +71,7 @@ Disable and stop (no longer starts on boot):
 pixi run nav-service-autostart-off
 ```
 
-Output appends to `logs/navigator.log`. Manage with:
+Output appends to `logs/navigator.log` (logrotate when autostart is installed: 10 MB × 7, compressed). Manage with:
 
 ```sh
 pixi run nav-service-start
