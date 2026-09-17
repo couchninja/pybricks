@@ -10,10 +10,10 @@ from gpiod.line import Bias, Direction, Edge, Value
 
 from gpio.button_config import (
     BUTTONS,
-    CLOCK_UNSYNC_LED_PIN,
+    CLOCK_UNSYNC_BUTTON_INDEX,
     DEFAULT_BUTTON_INDEX,
-    HUB_CALIBRATE_LED_PIN,
-    HUB_SEARCH_LED_PIN,
+    HUB_CALIBRATE_BUTTON_INDEX,
+    HUB_SEARCH_BUTTON_INDEX,
     ButtonConfig,
     ButtonData,
     HubLinkPhase,
@@ -26,10 +26,10 @@ __all__ = [
     "ButtonConfig",
     "ButtonData",
     "ButtonMenu",
-    "CLOCK_UNSYNC_LED_PIN",
+    "CLOCK_UNSYNC_BUTTON_INDEX",
     "DEFAULT_BUTTON_INDEX",
-    "HUB_CALIBRATE_LED_PIN",
-    "HUB_SEARCH_LED_PIN",
+    "HUB_CALIBRATE_BUTTON_INDEX",
+    "HUB_SEARCH_BUTTON_INDEX",
     "HubLinkPhase",
     "PanelStatus",
 ]
@@ -39,9 +39,7 @@ BLINK_PERIOD_S = 0.4
 
 GpiodLineConfig = dict[Iterable[int | str] | int | str, gpiod.LineSettings | None]
 
-_ALL_LED_PINS = frozenset(
-    {button["led_pin"] for button in BUTTONS} | {CLOCK_UNSYNC_LED_PIN, HUB_SEARCH_LED_PIN, HUB_CALIBRATE_LED_PIN}
-)
+_ALL_LED_PINS = frozenset(button["led_pin"] for button in BUTTONS)
 
 
 class ButtonMenu:
@@ -211,29 +209,29 @@ class ButtonMenu:
 
     async def _status_led_loop(self) -> None:
         while True:
-            status_pins = self._active_status_pins(self._panel_status)
-            if not status_pins:
+            status_indices = self._active_status_button_indices(self._panel_status)
+            if not status_indices:
                 await asyncio.sleep(BLINK_PERIOD_S / 4)
                 continue
-            self._set_status_leds(status_pins, True)
+            self._set_status_leds(status_indices, True)
             await asyncio.sleep(BLINK_PERIOD_S)
-            self._set_status_leds(status_pins, False)
+            self._set_status_leds(status_indices, False)
             await asyncio.sleep(BLINK_PERIOD_S)
 
-    def _active_status_pins(self, status: PanelStatus) -> tuple[int, ...]:
-        pins: list[int] = []
+    def _active_status_button_indices(self, status: PanelStatus) -> tuple[int, ...]:
+        indices: list[int] = []
         if not status.clock_synchronized:
-            pins.append(CLOCK_UNSYNC_LED_PIN)
+            indices.append(CLOCK_UNSYNC_BUTTON_INDEX)
         if status.hub == "disconnected":
-            pins.append(HUB_SEARCH_LED_PIN)
+            indices.append(HUB_SEARCH_BUTTON_INDEX)
         elif status.hub == "calibrating":
-            pins.append(HUB_CALIBRATE_LED_PIN)
-        return tuple(pins)
+            indices.append(HUB_CALIBRATE_BUTTON_INDEX)
+        return tuple(indices)
 
-    def _set_status_leds(self, active_pins: Iterable[int], on: bool) -> None:
-        active = set(active_pins)
-        for pin in _ALL_LED_PINS:
-            self._set_led(pin, pin in active and on)
+    def _set_status_leds(self, active_indices: Iterable[int], on: bool) -> None:
+        active = set(active_indices)
+        for index, button in enumerate(self._buttons):
+            self._set_led(button["led_pin"], index in active and on)
 
     def _all_leds_off(self) -> None:
         for pin in _ALL_LED_PINS:

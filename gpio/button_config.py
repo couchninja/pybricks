@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import colorsys
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
@@ -7,10 +8,10 @@ from pybricks.parameters import Color
 
 from simulate.astronomy.constants import PointingTarget
 
-# Status LEDs on the panel (white / blue / orange indicators).
-CLOCK_UNSYNC_LED_PIN = 17
-HUB_SEARCH_LED_PIN = 23
-HUB_CALIBRATE_LED_PIN = 25
+# Panel status indicators reuse the first three button LEDs.
+CLOCK_UNSYNC_BUTTON_INDEX = 0
+HUB_SEARCH_BUTTON_INDEX = 1
+HUB_CALIBRATE_BUTTON_INDEX = 2
 
 HubLinkPhase = Literal["disconnected", "calibrating", "ready"]
 
@@ -67,6 +68,26 @@ BUTTONS: tuple[ButtonConfig, ...] = (
 )
 
 DEFAULT_BUTTON_INDEX = 1
+
+
+def pybricks_color_rgba(color: Color) -> list[int]:
+    red, green, blue = colorsys.hsv_to_rgb(color.h / 360.0, color.s / 100.0, color.v / 100.0)
+    return [int(round(red * 255)), int(round(green * 255)), int(round(blue * 255)), 255]
+
+
+def _pointing_target_button_colors() -> dict[PointingTarget, Color]:
+    by_target: dict[PointingTarget, Color] = {}
+    for button in BUTTONS:
+        for mode in button["modes"]:
+            by_target[mode["target"]] = mode["color"]
+    return by_target
+
+
+POINTING_TARGET_BUTTON_COLORS = _pointing_target_button_colors()
+
+
+def pointing_target_button_rgba(target: PointingTarget) -> list[int]:
+    return pybricks_color_rgba(POINTING_TARGET_BUTTON_COLORS[target])
 
 
 @dataclass

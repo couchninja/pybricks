@@ -10,10 +10,10 @@ from gpiod.line import Value
 
 from gpio.button_menu import (
     BUTTONS,
-    CLOCK_UNSYNC_LED_PIN,
+    CLOCK_UNSYNC_BUTTON_INDEX,
     DEFAULT_BUTTON_INDEX,
-    HUB_CALIBRATE_LED_PIN,
-    HUB_SEARCH_LED_PIN,
+    HUB_CALIBRATE_BUTTON_INDEX,
+    HUB_SEARCH_BUTTON_INDEX,
     ButtonMenu,
     PanelStatus,
 )
@@ -86,20 +86,20 @@ async def test_inputs_ignored_while_disabled() -> None:
         assert lit_pins(request) == {DEFAULT_LED_PIN}
 
 
-def test_panel_status_pin_selection() -> None:
+def test_panel_status_button_selection() -> None:
     with fake_menu() as (menu, _request):
-        assert menu._active_status_pins(PanelStatus(clock_synchronized=False, hub="disconnected")) == (
-            CLOCK_UNSYNC_LED_PIN,
-            HUB_SEARCH_LED_PIN,
+        assert menu._active_status_button_indices(PanelStatus(clock_synchronized=False, hub="disconnected")) == (
+            CLOCK_UNSYNC_BUTTON_INDEX,
+            HUB_SEARCH_BUTTON_INDEX,
         )
-        assert menu._active_status_pins(PanelStatus(clock_synchronized=False, hub="calibrating")) == (
-            CLOCK_UNSYNC_LED_PIN,
-            HUB_CALIBRATE_LED_PIN,
+        assert menu._active_status_button_indices(PanelStatus(clock_synchronized=False, hub="calibrating")) == (
+            CLOCK_UNSYNC_BUTTON_INDEX,
+            HUB_CALIBRATE_BUTTON_INDEX,
         )
-        assert menu._active_status_pins(PanelStatus(clock_synchronized=True, hub="calibrating")) == (
-            HUB_CALIBRATE_LED_PIN,
+        assert menu._active_status_button_indices(PanelStatus(clock_synchronized=True, hub="calibrating")) == (
+            HUB_CALIBRATE_BUTTON_INDEX,
         )
-        assert menu._active_status_pins(PanelStatus(clock_synchronized=True, hub="ready")) == ()
+        assert menu._active_status_button_indices(PanelStatus(clock_synchronized=True, hub="ready")) == ()
 
 
 async def test_first_press_points_at_sun() -> None:
