@@ -4,7 +4,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 
 from pybricks.parameters import Port
 
-from gpio.button_menu import ButtonData, ButtonMenu
+from gpio.button_menu import ButtonData, ButtonMenu, PanelStatus
 from navigator.system_clock import clock_is_synchronized
 from navigator.web_ui import LogBuffer, capture_stdout, run_web_ui
 from pybricks_client import ColorDistanceSensor, Motor, MotorStalledError, MoveHub
@@ -112,9 +112,15 @@ async def point_at_target(hub: MoveHub, target: PointingTarget) -> None:
 
 
 @asynccontextmanager
-async def connected_hub(program: str | None) -> AsyncIterator[MoveHub]:
+async def connected_hub(
+    program: str | None,
+    *,
+    panel_status: PanelStatus | None = None,
+) -> AsyncIterator[MoveHub]:
     async with AsyncExitStack() as stack:
         while True:
+            if panel_status is not None:
+                panel_status.clock_synchronized = clock_is_synchronized()
             try:
                 hub = await stack.enter_async_context(MoveHub.connect(program=program, retries=1))
                 break
@@ -138,6 +144,45 @@ def resume_after_clock_sync() -> None:
     _last_target_angles.clear()
 
 
+async def wait_for_clock_sync_panel(buttons: ButtonMenu) -> None:
+    async with buttons.panel_status() as status:
+        status.hub = "ready"
+        while not clock_is_synchronized():
+            status.clock_synchronized = False
+            await asyncio.sleep(CLOCK_WAIT_POLL_S)
+        status.clock_synchronized = True
+
+
+async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonMenu, program: str | None) -> MoveHub:
+    async with buttons.panel_status() as status:
+        hub: MoveHub | None = None
+        calibrated = False
+        while True:
+            status.clock_synchronized = clock_is_synchronized()
+            if hub is None:
+                status.hub = "disconnected"
+                try:
+                    hub = await hub_stack.enter_async_context(
+                        connected_hub(program, panel_status=status)
+                    )
+                except RECOVERABLE_ERRORS as exc:
+                    print(f"Connection failed ({format_error(exc)}); searching again...")
+                    await asyncio.sleep(RECONNECT_DELAY_S)
+                    continue
+                print("Hub connected.")
+            if not calibrated:
+                status.hub = "calibrating"
+                await calibrate_motors(hub)
+                calibrated = True
+            status.hub = "ready"
+            while not clock_is_synchronized():
+                status.clock_synchronized = False
+                await asyncio.sleep(CLOCK_WAIT_POLL_S)
+            status.clock_synchronized = True
+            await asyncio.sleep(0)
+            return hub
+
+
 async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
     """Point at the selected target, then wait for the next press or a refresh.
 
@@ -156,10 +201,13 @@ async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
                         f"Clock not synchronized (system time {current_time().iso} UTC); "
                         "pointing suspended until the time is correct."
                     )
-                await buttons.wait_for_selection(timeout_s=CLOCK_WAIT_POLL_S)
+                buttons.set_inputs_enabled(False)
+                await wait_for_clock_sync_panel(buttons)
                 continue
             if not clock_ready:
                 clock_ready = True
+                buttons.set_inputs_enabled(True)
+                buttons.reset()
                 resume_after_clock_sync()
 
             button = buttons.selected_button
@@ -183,12 +231,12 @@ async def navigator_main(upload_program: bool = False) -> None:
             await outer_stack.enter_async_context(run_web_ui(buttons, log_buffer))
             while True:
                 buttons.reset()
+                buttons.set_inputs_enabled(False)
                 try:
-                    async with AsyncExitStack() as stack:
-                        async with buttons.blinking_selected():
-                            hub = await stack.enter_async_context(connected_hub(program))
-                            print("Hub connected.")
-                            await calibrate_motors(hub)
+                    async with AsyncExitStack() as hub_stack:
+                        hub = await connect_and_calibrate(hub_stack, buttons, program)
+                        buttons.reset()
+                        buttons.set_inputs_enabled(True)
                         await run_selection_loop(hub, buttons)
                 except RECOVERABLE_ERRORS as exc:
                     print(f"Hub lost ({format_error(exc)}); searching again...")

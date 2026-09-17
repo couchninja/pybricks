@@ -4,7 +4,8 @@ import asyncio
 import time
 from collections.abc import AsyncIterator, Iterable
 from contextlib import asynccontextmanager, suppress
-from typing import TypedDict
+from dataclasses import dataclass
+from typing import Literal, TypedDict
 
 import gpiod
 from gpiod.line import Bias, Direction, Edge, Value
@@ -14,6 +15,13 @@ from simulate.astronomy.constants import PointingTarget
 
 CHIP = "/dev/gpiochip0"
 BLINK_PERIOD_S = 0.4
+
+# Status LEDs on the panel (white / blue / orange indicators).
+CLOCK_UNSYNC_LED_PIN = 17
+HUB_SEARCH_LED_PIN = 23
+HUB_CALIBRATE_LED_PIN = 25
+
+HubLinkPhase = Literal["disconnected", "calibrating", "ready"]
 
 
 class ButtonMode(TypedDict):
@@ -71,6 +79,17 @@ DEFAULT_BUTTON_INDEX = 1
 
 GpiodLineConfig = dict[Iterable[int | str] | int | str, gpiod.LineSettings | None]
 
+_ALL_LED_PINS = frozenset(
+    {button["led_pin"] for button in BUTTONS}
+    | {CLOCK_UNSYNC_LED_PIN, HUB_SEARCH_LED_PIN, HUB_CALIBRATE_LED_PIN}
+)
+
+
+@dataclass
+class PanelStatus:
+    clock_synchronized: bool = False
+    hub: HubLinkPhase = "disconnected"
+
 
 class ButtonMenu:
     """Single-selection button panel: one LED lit for the selected target."""
@@ -88,6 +107,9 @@ class ButtonMenu:
         self._selected_index = DEFAULT_BUTTON_INDEX
         self._request: gpiod.LineRequest | None = None
         self._wake = asyncio.Event()
+        self._inputs_enabled = False
+        self._status_mode = False
+        self._panel_status = PanelStatus()
 
     def __enter__(self) -> ButtonMenu:
         self._request = gpiod.request_lines(
@@ -95,15 +117,39 @@ class ButtonMenu:
             consumer="navigator-buttons",
             config=self._line_config(),
         )
-        self.reset()
+        self._all_leds_off()
         return self
 
     def __exit__(self, *exc: object) -> None:
         if self._request is not None:
-            for button in self._buttons:
-                self._set_led(button["led_pin"], False)
+            self._all_leds_off()
             self._request.release()
             self._request = None
+
+    def set_inputs_enabled(self, enabled: bool) -> None:
+        self._inputs_enabled = enabled
+        if not enabled:
+            self._drain_edge_events()
+
+    @property
+    def inputs_enabled(self) -> bool:
+        return self._inputs_enabled
+
+    @asynccontextmanager
+    async def panel_status(self) -> AsyncIterator[PanelStatus]:
+        """Blink white / blue / orange status LEDs until ``panel_status`` exits."""
+        self._status_mode = True
+        self._panel_status = PanelStatus()
+        self._all_leds_off()
+        task = asyncio.create_task(self._status_led_loop())
+        try:
+            yield self._panel_status
+        finally:
+            self._status_mode = False
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+            self._all_leds_off()
 
     @property
     def selected_button(self) -> ButtonData:
@@ -121,7 +167,8 @@ class ButtonMenu:
         """Select the default button and put every button back on its first mode."""
         self._selected_index = DEFAULT_BUTTON_INDEX
         self._mode_indices = [0] * len(self._buttons)
-        self._show_selection()
+        if not self._status_mode:
+            self._show_selection()
 
     def cycle_pointing_target(self) -> None:
         """Advance to the next ``PointingTarget`` (same order as the astronomy viewer)."""
@@ -136,7 +183,8 @@ class ButtonMenu:
                 if mode["target"] == target:
                     self._selected_index = index
                     self._mode_indices[index] = mode_index
-                    self._show_selection()
+                    if not self._status_mode:
+                        self._show_selection()
                     self._wake.set()
                     return
         raise ValueError(f"No button mode for {target!r}")
@@ -161,6 +209,9 @@ class ButtonMenu:
             slice_s = min(remaining, 0.2)
             if not await asyncio.to_thread(request.wait_edge_events, slice_s):
                 continue
+            if not self._inputs_enabled:
+                self._drain_edge_events()
+                continue
             for event in request.read_edge_events():
                 index = self._index_by_pin.get(event.line_offset)
                 if index is not None:
@@ -170,6 +221,8 @@ class ButtonMenu:
     @asynccontextmanager
     async def blinking_selected(self) -> AsyncIterator[None]:
         """Blink the selected LED while the navigator is busy."""
+        if self._status_mode:
+            raise RuntimeError("panel_status and blinking_selected cannot overlap")
         self._show_selection()
         led_pin = self._buttons[self._selected_index]["led_pin"]
         task = asyncio.create_task(self._blink_led(led_pin))
@@ -187,7 +240,8 @@ class ButtonMenu:
             self._mode_indices[index] = (self._mode_indices[index] + 1) % len(modes)
         else:
             self._selected_index = index
-        self._show_selection()
+        if not self._status_mode:
+            self._show_selection()
 
     def _drain_edge_events(self) -> None:
         request = self._require_request()
@@ -201,6 +255,36 @@ class ButtonMenu:
             await asyncio.sleep(BLINK_PERIOD_S)
             on = not on
             self._set_led(led_pin, on)
+
+    async def _status_led_loop(self) -> None:
+        while True:
+            status_pins = self._active_status_pins(self._panel_status)
+            if not status_pins:
+                await asyncio.sleep(BLINK_PERIOD_S / 4)
+                continue
+            self._set_status_leds(status_pins, True)
+            await asyncio.sleep(BLINK_PERIOD_S)
+            self._set_status_leds(status_pins, False)
+            await asyncio.sleep(BLINK_PERIOD_S)
+
+    def _active_status_pins(self, status: PanelStatus) -> tuple[int, ...]:
+        pins: list[int] = []
+        if not status.clock_synchronized:
+            pins.append(CLOCK_UNSYNC_LED_PIN)
+        if status.hub == "disconnected":
+            pins.append(HUB_SEARCH_LED_PIN)
+        elif status.hub == "calibrating":
+            pins.append(HUB_CALIBRATE_LED_PIN)
+        return tuple(pins)
+
+    def _set_status_leds(self, active_pins: Iterable[int], on: bool) -> None:
+        active = set(active_pins)
+        for pin in _ALL_LED_PINS:
+            self._set_led(pin, pin in active and on)
+
+    def _all_leds_off(self) -> None:
+        for pin in _ALL_LED_PINS:
+            self._set_led(pin, False)
 
     def _show_selection(self) -> None:
         for index, button in enumerate(self._buttons):
@@ -222,7 +306,8 @@ class ButtonMenu:
                 bias=Bias.PULL_UP,
                 edge_detection=Edge.FALLING,
             )
-            config[button["led_pin"]] = gpiod.LineSettings(
+        for pin in _ALL_LED_PINS:
+            config[pin] = gpiod.LineSettings(
                 direction=Direction.OUTPUT,
                 output_value=Value.INACTIVE,
             )

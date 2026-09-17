@@ -8,7 +8,15 @@ from unittest.mock import patch
 import gpiod
 from gpiod.line import Value
 
-from gpio.button_menu import BUTTONS, DEFAULT_BUTTON_INDEX, ButtonMenu
+from gpio.button_menu import (
+    BUTTONS,
+    CLOCK_UNSYNC_LED_PIN,
+    DEFAULT_BUTTON_INDEX,
+    HUB_CALIBRATE_LED_PIN,
+    HUB_SEARCH_LED_PIN,
+    ButtonMenu,
+    PanelStatus,
+)
 from simulate.astronomy.constants import PointingTarget
 
 WAIT_TIMEOUT_S = 1.0
@@ -62,11 +70,41 @@ def lit_pins(request: FakeRequest) -> set[int]:
 def test_default_selection() -> None:
     with fake_menu() as (menu, request):
         assert menu.selected_button["target"] == PointingTarget.EARTH_ROTATION
+        assert lit_pins(request) == set()
+
+
+async def test_inputs_ignored_while_disabled() -> None:
+    with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
+        menu.reset()
         assert lit_pins(request) == {DEFAULT_LED_PIN}
+
+        menu.set_inputs_enabled(False)
+        request.incoming.append(SUN_BUTTON_PIN)
+        await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.EARTH_ROTATION
+        assert lit_pins(request) == {DEFAULT_LED_PIN}
+
+
+def test_panel_status_pin_selection() -> None:
+    with fake_menu() as (menu, _request):
+        assert menu._active_status_pins(PanelStatus(clock_synchronized=False, hub="disconnected")) == (
+            CLOCK_UNSYNC_LED_PIN,
+            HUB_SEARCH_LED_PIN,
+        )
+        assert menu._active_status_pins(PanelStatus(clock_synchronized=False, hub="calibrating")) == (
+            CLOCK_UNSYNC_LED_PIN,
+            HUB_CALIBRATE_LED_PIN,
+        )
+        assert menu._active_status_pins(PanelStatus(clock_synchronized=True, hub="calibrating")) == (
+            HUB_CALIBRATE_LED_PIN,
+        )
+        assert menu._active_status_pins(PanelStatus(clock_synchronized=True, hub="ready")) == ()
 
 
 async def test_first_press_points_at_sun() -> None:
     with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
         request.incoming.append(SUN_BUTTON_PIN)
         await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
         assert menu.selected_button["target"] == PointingTarget.SUN
@@ -87,6 +125,8 @@ async def test_first_press_points_at_sun() -> None:
 
 async def test_presses_while_busy_are_dropped() -> None:
     with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
+        menu.reset()
         # Already in the queue when the menu starts waiting: pressed while moving.
         request.queued.append(SUN_BUTTON_PIN)
         await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
@@ -105,6 +145,7 @@ async def test_cycle_pointing_target_steps_through_enum() -> None:
 
 async def test_web_cycle_wakes_wait_for_selection() -> None:
     with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
         wait_task = asyncio.create_task(menu.wait_for_selection(timeout_s=5.0))
         await asyncio.sleep(0.05)
         assert not wait_task.done()
@@ -115,6 +156,7 @@ async def test_web_cycle_wakes_wait_for_selection() -> None:
 
 async def test_reset_restores_default() -> None:
     with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
         for _ in range(2):
             request.incoming.append(SUN_BUTTON_PIN)
             await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)

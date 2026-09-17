@@ -1,7 +1,7 @@
 """Navigator pointing helpers without hardware."""
 
 from contextlib import nullcontext
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from pybricks.parameters import Color, Port
@@ -35,6 +35,9 @@ def fake_buttons(target: PointingTarget) -> MagicMock:
     }
     buttons.wait_for_selection = AsyncMock()
     buttons.blinking_selected = MagicMock(side_effect=nullcontext)
+    buttons.set_inputs_enabled = MagicMock()
+    buttons.reset = MagicMock()
+    buttons.panel_status = MagicMock(side_effect=nullcontext)
     return buttons
 
 
@@ -89,15 +92,19 @@ async def test_pointing_suspended_until_clock_is_synchronized() -> None:
         patch.object(nav, "clock_is_synchronized", side_effect=lambda: next(sync_states)),
         patch.object(nav, "pointing_would_move", return_value=True),
         patch.object(nav, "point_selected", side_effect=record_point),
+        patch.object(nav, "wait_for_clock_sync_panel", new=AsyncMock()) as wait_panel,
         patch.object(nav, "resume_after_clock_sync") as resume,
         pytest.raises(LoopStopped),
     ):
         await nav.run_selection_loop(hub, buttons)
 
-    # Nothing moved during the two unsynchronized polls, then it pointed once.
+    # Nothing moved during the unsynchronized wait, then it pointed once.
     assert pointed == [PointingTarget.SUN]
     assert resume.call_count == 1
-    assert wait_timeouts(buttons) == [nav.CLOCK_WAIT_POLL_S, nav.CLOCK_WAIT_POLL_S]
+    assert wait_panel.await_count == 2
+    assert buttons.set_inputs_enabled.call_args_list == [call(False), call(False), call(True)]
+    assert buttons.reset.call_count == 1
+    assert wait_timeouts(buttons) == []
 
 
 async def test_pointing_starts_immediately_when_clock_is_synchronized() -> None:
