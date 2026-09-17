@@ -127,13 +127,16 @@ _INDEX_HTML = """<!DOCTYPE html>
       line-height: 1.35;
     }
     .time-scale-buttons {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      flex-wrap: nowrap;
       gap: 0.5rem;
+      overflow-x: auto;
     }
     button.time-scale {
-      padding: 0.75rem 0.65rem;
-      font-size: 0.9375rem;
+      flex: 1 1 0;
+      min-width: max-content;
+      padding: 0.75rem 0.5rem;
+      font-size: 0.8125rem;
       font-weight: 600;
       border: 1px solid rgba(61, 156, 240, 0.45);
       border-radius: 10px;
@@ -141,13 +144,13 @@ _INDEX_HTML = """<!DOCTYPE html>
       color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
+      white-space: nowrap;
     }
     button.time-scale.active {
       border-color: var(--accent);
       background: rgba(61, 156, 240, 0.22);
     }
     button.time-scale-now {
-      grid-column: 1 / -1;
       border-color: rgba(120, 220, 160, 0.55);
       background: rgba(40, 80, 55, 0.45);
     }
@@ -175,6 +178,7 @@ _INDEX_HTML = """<!DOCTYPE html>
     <div class="time-scale-current" id="sim-time">—</div>
     <div class="time-scale-buttons">
       <button type="button" class="time-scale" data-preset="realtime">Realtime</button>
+      <button type="button" class="time-scale" data-preset="minute">1 min / s</button>
       <button type="button" class="time-scale" data-preset="hour">1 hour / s</button>
       <button type="button" class="time-scale" data-preset="day">1 day / s</button>
       <button type="button" class="time-scale" data-preset="month">1 month / s</button>

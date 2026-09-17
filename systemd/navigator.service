@@ -1,20 +1,18 @@
 [Unit]
 Description=Pybricks navigator (LEGO Move Hub)
-After=bluetooth.service
+After=bluetooth.service dbus.service
 Wants=bluetooth.service
 
 [Service]
 Type=simple
-User=aron
-Group=aron
-WorkingDirectory=/home/aron/code/pybricks
-Environment=PATH=/home/aron/.pixi/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=@REPO_ROOT@
+Environment=PATH=@PIXI_BIN@:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/aron/.pixi/bin/pixi run nav
+ExecStart=@PIXI_BIN@/pixi run nav
 Restart=on-failure
 RestartSec=5
-StandardOutput=append:/home/aron/code/pybricks/logs/navigator.log
-StandardError=append:/home/aron/code/pybricks/logs/navigator.log
+StandardOutput=append:@REPO_ROOT@/logs/navigator.log
+StandardError=append:@REPO_ROOT@/logs/navigator.log
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

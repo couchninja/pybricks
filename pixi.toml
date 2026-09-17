@@ -15,9 +15,9 @@ viewer-watch = "python -m watchfiles --filter python \"python simulate/astronomy
 nav = "python -u navigator/navigator_main.py"
 nav-watch = "python -m watchfiles --ignore-paths navigator/web_viewer/dist,navigator/web_viewer/node_modules --grace-period 2 \"python -u navigator/navigator_main.py\" navigator/ gpio/ simulate/"
 nav-service-autostart = "bash systemd/install-navigator-service.sh"
-nav-service-autostart-off = "sudo systemctl disable --now navigator && sudo rm -f /etc/logrotate.d/navigator"
-nav-service-start = "sudo systemctl start navigator"
-nav-service-stop = "sudo systemctl stop navigator"
+nav-service-autostart-off = "bash systemd/uninstall-navigator-service.sh"
+nav-service-start = "systemctl --user start navigator"
+nav-service-stop = "systemctl --user stop navigator"
 nav-service-status = "bash systemd/navigator-service-status.sh"
 nav-service-logs = "tail -f logs/navigator.log"
 motion-range = "python navigator/motion_range_main.py"
@@ -43,6 +43,7 @@ wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORI
 [dependencies]
 micropython = ">=1.28.0,<2"
 python = ">=3.13,<3.14"
+nodejs = ">=26.8.2,<26.9"
 
 [pypi-dependencies]
 # Host-side API stubs for editing hub programs (Color, Port, etc.).

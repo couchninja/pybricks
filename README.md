@@ -59,11 +59,13 @@ Bluetooth must be enabled on this machine. On Linux, your user needs permission 
 
 ### Autostart navigator on boot
 
-Install and enable the systemd unit (starts after Bluetooth on reboot):
+Install a **user** systemd unit, enable linger (starts at boot without login), and install logrotate:
 
 ```sh
 pixi run nav-service-autostart
 ```
+
+(`sudo` is only for linger and logrotate. Start/stop and reinstalling the unit file do not need sudo.)
 
 Disable and stop (no longer starts on boot):
 
@@ -79,6 +81,14 @@ pixi run nav-service-stop
 pixi run nav-service-status
 pixi run nav-service-logs
 ```
+
+### Button panel LEDs at startup
+
+| LED | Button color | Blinking while… |
+|-----|------------------------|-----------------|
+| 1 | White | Clock not synchronized yet / no internet |
+| 2 | Blue | Searching for the hub over BLE |
+| 3 | Orange | Hub connected; calibrating pan and tilt |
 
 ## Deploy the hub program
 
