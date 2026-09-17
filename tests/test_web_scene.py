@@ -1,5 +1,6 @@
 import json
 
+from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
 
@@ -20,6 +21,14 @@ def test_scene_snapshot_follows_pointing_target() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.MOON)
     assert payload["pointing_target_label"] == PointingTarget.MOON.label
+
+
+def test_observer_arrow_color_matches_button_for_target() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.SUN)
+    observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
+    expected = pointing_target_button_rgba(PointingTarget.SUN)
+    assert observer_arrow["color"] == expected[:3]
 
 
 def test_scene_snapshot_includes_arrow_mesh_length() -> None:

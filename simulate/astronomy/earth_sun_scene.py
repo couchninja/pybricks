@@ -37,6 +37,7 @@ from astropy import units as u
 from astropy.time import Time
 from trimesh.visual.color import ColorVisuals
 
+from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import (
     AXIS_COLOR,
     AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION,
@@ -61,7 +62,6 @@ from simulate.astronomy.constants import (
     MOON_RADIUS_AU,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
-    OBSERVER_VELOCITY_ARROW_COLOR,
     OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION,
     OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
@@ -190,7 +190,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
     scene.add_geometry(
         _color_mesh(
             _velocity_arrow_mesh(),
-            OBSERVER_VELOCITY_ARROW_COLOR,
+            pointing_target_button_rgba(PointingTarget.EARTH_ROTATION),
         ),
         geom_name="observer_velocity_arrow",
         node_name="observer_velocity_arrow",
@@ -271,6 +271,10 @@ def update_earth_sun_scene(
         matrix=_transform_matrix(np.eye(3), state["observer_position"]),
     )
     pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
+    _color_mesh(
+        scene.geometry["observer_velocity_arrow"],
+        pointing_target_button_rgba(pointing_target),
+    )
     scene.graph.update(
         "observer_velocity_arrow",
         SOLAR_SYSTEM_FRAME,
