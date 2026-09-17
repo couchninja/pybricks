@@ -1,5 +1,9 @@
 import json
 
+import numpy as np
+from astropy import units as u
+from astropy.coordinates import SkyCoord
+
 from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
@@ -29,6 +33,35 @@ def test_observer_arrow_color_matches_button_for_target() -> None:
     observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
     expected = pointing_target_button_rgba(PointingTarget.SUN)
     assert observer_arrow["color"] == expected[:3]
+
+
+def test_inertial_to_root_rotation_aligns_galactic_center_with_sagittarius() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.MILKY_WAY_CENTER)
+    rotation = np.array(payload["inertial_to_root_rotation"], dtype=float).reshape(3, 3).T
+    galactic_center = next(body for body in payload["bodies"] if body["name"] == "galactic_center")
+    marker_direction = np.array(galactic_center["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    marker_direction /= np.linalg.norm(marker_direction)
+
+    sgr_a = SkyCoord(ra=266.416 * u.deg, dec=-29.0078 * u.deg, frame="icrs").transform_to(
+        "geocentricmeanecliptic",
+    )
+    ecliptic_direction = np.array(sgr_a.cartesian.xyz.value, dtype=float)
+    ecliptic_direction /= np.linalg.norm(ecliptic_direction)
+
+    sky_direction = rotation @ ecliptic_direction
+    assert np.dot(sky_direction, marker_direction) > 0.999
+
+
+def test_milky_way_diameter_bounds_galactic_orbit() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
+    diameter = payload["milky_way_diameter_au"]
+    assert diameter > payload["default_camera_distance_au"]
+    galactic_center = next(body for body in payload["bodies"] if body["name"] == "galactic_center")
+    gc_position = np.array(galactic_center["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    gc_distance = float(np.linalg.norm(gc_position))
+    assert diameter >= 2 * gc_distance * 0.99
 
 
 def test_scene_snapshot_includes_arrow_mesh_length() -> None:

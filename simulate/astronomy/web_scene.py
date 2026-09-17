@@ -31,7 +31,7 @@ from simulate.astronomy.simulation_clock import (
     time_scaling,
 )
 from simulate.astronomy.utils.camera import camera_clip_planes
-from simulate.astronomy.utils.ephemeris import current_time
+from simulate.astronomy.utils.ephemeris import current_time, ecliptic_to_galactocentric_rotation
 from simulate.astronomy.utils.iss import refresh_iss_tle
 from simulate.astronomy.utils.iss_tle import ISS_TLE_REFRESH_INTERVAL_S
 
@@ -139,6 +139,10 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         "arrow_min_length_au": OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * 2 * EARTH_RADIUS_AU,
         "z_near": z_near,
         "z_far": z_far,
+        "inertial_to_root_rotation": _rotation_to_three(
+            ecliptic_to_galactocentric_rotation(current),
+        ),
+        "milky_way_diameter_au": _milky_way_diameter_au(scene),
         "bodies": [_serialize_body(scene, node, label) for node, label in _BODY_NODES],
         "paths": [_serialize_path(scene, node) for node in _PATH_NODES],
         "arrows": [_serialize_arrow(scene, node) for node in _ARROW_NODES],
@@ -220,3 +224,17 @@ def _path_segments_world(geometry: trimesh.path.Path3D, transform: np.ndarray) -
 
 def _matrix_to_three(matrix: np.ndarray) -> list[float]:
     return matrix.T.reshape(-1).astype(float).tolist()
+
+
+def _rotation_to_three(rotation: np.ndarray) -> list[float]:
+    return rotation.T.reshape(-1).astype(float).tolist()
+
+
+def _milky_way_diameter_au(scene: trimesh.Scene) -> float:
+    gc_transform, _ = scene.graph.get("galactic_center", ROOT_FRAME)
+    galactic_center = gc_transform[:3, 3]
+    orbit_transform, orbit_geometry_name = scene.graph.get("galactic_orbit", ROOT_FRAME)
+    orbit = scene.geometry[orbit_geometry_name]
+    orbit_world = transform_points(orbit.vertices, orbit_transform)
+    orbit_radius = float(np.max(np.linalg.norm(orbit_world - galactic_center, axis=1)))
+    return 2.0 * orbit_radius

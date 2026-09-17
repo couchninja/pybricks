@@ -36,6 +36,10 @@ export type SceneSnapshot = {
   arrow_min_length_au: number;
   z_near: number;
   z_far: number;
+  /** Maps mean ecliptic directions into the viewer root frame (column-major 3×3). */
+  inertial_to_root_rotation: number[];
+  /** Galactic orbit diameter; upper bound for camera distance from Earth. */
+  milky_way_diameter_au: number;
   bodies: SceneBody[];
   paths: ScenePath[];
   arrows: SceneArrow[];

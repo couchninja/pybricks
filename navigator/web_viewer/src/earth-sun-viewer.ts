@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 
+import { createConstellationSky } from "./constellation-sky";
 import { createEarthMesh } from "./earth-mesh";
 import type {
   ArrowDistanceAnchor,
@@ -110,6 +111,7 @@ export class EarthSunViewer {
   private readonly arrows = new Map<string, THREE.ArrowHelper>();
   private readonly arrowFrames = new Map<string, ArrowFrame>();
   private readonly galacticCenter = new THREE.Vector3();
+  private readonly constellationSky = createConstellationSky(1);
   private arrowMeshLengthAu = 0;
   private arrowEarthRadiusAu = 0;
   private arrowLengthCameraFraction = 0.05;
@@ -146,7 +148,7 @@ export class EarthSunViewer {
     canvasHost.appendChild(this.fpsEl);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0e12);
+    this.scene.add(this.constellationSky.root);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.001, 1000);
     this.camera.position.set(0, 0, 1);
@@ -167,6 +169,7 @@ export class EarthSunViewer {
     this.controls.target.set(0, 0, 0);
     this.controls.addEventListener("change", () => {
       this.cameraMotionUntil = performance.now() + 250;
+      this.clampCameraDistance();
       this.syncClipPlanes();
       this.layoutArrows();
     });
@@ -204,6 +207,11 @@ export class EarthSunViewer {
         : snapshot.arrow_mesh_length_au / snapshot.default_camera_distance_au;
     this.arrowMinLengthAu = snapshot.arrow_min_length_au;
     this.sceneScale = snapshot.scene_scale;
+    this.constellationSky.setInertialToRootRotation(snapshot.inertial_to_root_rotation);
+    if (snapshot.milky_way_diameter_au > 0) {
+      this.controls.maxDistance = snapshot.milky_way_diameter_au;
+    }
+    this.clampCameraDistance();
     this.captionEl.textContent = `Earth-sun (${snapshot.time_iso})`;
 
     for (const body of snapshot.bodies) {
@@ -363,6 +371,20 @@ export class EarthSunViewer {
     }
   }
 
+  private clampCameraDistance(): void {
+    const maxDistance = this.controls.maxDistance;
+    if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
+      return;
+    }
+    const offset = this.camera.position.clone().sub(this.controls.target);
+    const distance = offset.length();
+    if (distance <= maxDistance) {
+      return;
+    }
+    offset.multiplyScalar(maxDistance / distance);
+    this.camera.position.copy(this.controls.target).add(offset);
+  }
+
   private syncClipPlanes(): void {
     const distance = this.camera.position.distanceTo(this.controls.target);
     const far = distance + this.sceneScale * 2;
@@ -370,19 +392,26 @@ export class EarthSunViewer {
     this.camera.near = near;
     this.camera.far = far;
     this.camera.updateProjectionMatrix();
+    this.constellationSky.setRadius(this.constellationSky.radiusForCameraFar(far));
   }
 
   private updateLabels(): void {
-    for (const entry of this.bodies.values()) {
-      const label = entry.label;
-      if (!label) {
-        continue;
-      }
+    const hideWhenBehind = (label: CSS2DObject): void => {
       const world = new THREE.Vector3();
       label.getWorldPosition(world);
       const projected = world.clone().project(this.camera);
       const behind = projected.z < -1 || projected.z > 1;
       label.element.style.opacity = behind ? "0" : "1";
+    };
+    for (const entry of this.bodies.values()) {
+      const label = entry.label;
+      if (!label) {
+        continue;
+      }
+      hideWhenBehind(label);
+    }
+    for (const label of this.constellationSky.labels) {
+      hideWhenBehind(label);
     }
   }
 
