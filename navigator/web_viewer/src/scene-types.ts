@@ -31,6 +31,9 @@ export type SceneSnapshot = {
   camera_distance_au: number;
   default_camera_distance_au: number;
   earth_radius_au: number;
+  earth_orbit_radius_au: number;
+  skybox_fade_camera_distance_orbit_multiple: number;
+  skybox_fade_span_orbit_radius_multiple: number;
   arrow_mesh_length_au: number;
   arrow_length_camera_distance_fraction: number;
   arrow_min_length_au: number;

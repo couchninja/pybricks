@@ -64,6 +64,20 @@ def test_milky_way_diameter_bounds_galactic_orbit() -> None:
     assert diameter >= 2 * gc_distance * 0.99
 
 
+def test_scene_snapshot_includes_skybox_fade_metadata() -> None:
+    reset_web_scene_cache()
+    from simulate.astronomy.constants import (
+        EARTH_ORBIT_RADIUS_AU,
+        SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
+        SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
+    )
+
+    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
+    assert payload["earth_orbit_radius_au"] == EARTH_ORBIT_RADIUS_AU
+    assert payload["skybox_fade_camera_distance_orbit_multiple"] == SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE
+    assert payload["skybox_fade_span_orbit_radius_multiple"] == SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE
+
+
 def test_scene_snapshot_includes_arrow_mesh_length() -> None:
     reset_web_scene_cache()
     from simulate.astronomy.constants import EARTH_RADIUS_AU, OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 
-import { createConstellationSky } from "./constellation-sky";
+import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
 import { createEarthMesh } from "./earth-mesh";
 import type {
   ArrowDistanceAnchor,
@@ -120,6 +120,10 @@ export class EarthSunViewer {
   private readonly fpsEl: HTMLDivElement;
   private defaultCameraDistance = 1;
   private earthRadiusAu = 1;
+  private earthOrbitRadiusAu = 1;
+  private skyboxFadeOrbitMultiple = 10;
+  private skyboxFadeSpanOrbitMultiple = 10;
+  private skyOpacity = 1;
   private sceneScale = 1;
   private animationId = 0;
   private lastRenderTime = 0;
@@ -198,6 +202,9 @@ export class EarthSunViewer {
   applySnapshot(snapshot: SceneSnapshot): void {
     this.defaultCameraDistance = snapshot.default_camera_distance_au;
     this.earthRadiusAu = snapshot.earth_radius_au;
+    this.earthOrbitRadiusAu = snapshot.earth_orbit_radius_au;
+    this.skyboxFadeOrbitMultiple = snapshot.skybox_fade_camera_distance_orbit_multiple;
+    this.skyboxFadeSpanOrbitMultiple = snapshot.skybox_fade_span_orbit_radius_multiple;
     this.arrowMeshLengthAu = snapshot.arrow_mesh_length_au;
     this.arrowEarthRadiusAu = snapshot.earth_radius_au;
     const fraction = snapshot.arrow_length_camera_distance_fraction;
@@ -393,15 +400,28 @@ export class EarthSunViewer {
     this.camera.far = far;
     this.camera.updateProjectionMatrix();
     this.constellationSky.setRadius(this.constellationSky.radiusForCameraFar(far));
+    this.updateSkyOpacity();
+  }
+
+  private updateSkyOpacity(): void {
+    const cameraDistance = this.camera.position.distanceTo(this.controls.target);
+    const opacity = skyOpacityForCameraDistance(
+      cameraDistance,
+      this.earthOrbitRadiusAu,
+      this.skyboxFadeOrbitMultiple,
+      this.skyboxFadeSpanOrbitMultiple,
+    );
+    this.skyOpacity = opacity;
+    this.constellationSky.setOpacity(opacity);
   }
 
   private updateLabels(): void {
-    const hideWhenBehind = (label: CSS2DObject): void => {
+    const hideWhenBehind = (label: CSS2DObject, visibleOpacity = 1): void => {
       const world = new THREE.Vector3();
       label.getWorldPosition(world);
       const projected = world.clone().project(this.camera);
       const behind = projected.z < -1 || projected.z > 1;
-      label.element.style.opacity = behind ? "0" : "1";
+      label.element.style.opacity = behind ? "0" : String(visibleOpacity);
     };
     for (const entry of this.bodies.values()) {
       const label = entry.label;
@@ -411,7 +431,7 @@ export class EarthSunViewer {
       hideWhenBehind(label);
     }
     for (const label of this.constellationSky.labels) {
-      hideWhenBehind(label);
+      hideWhenBehind(label, this.skyOpacity);
     }
   }
 

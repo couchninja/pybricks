@@ -79,13 +79,54 @@ _INDEX_HTML = """<!DOCTYPE html>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      padding: 0;
       background: var(--bg);
       color: var(--text);
       min-height: 100dvh;
+      box-sizing: border-box;
     }
-    #viewer-root { min-height: 42vh; }
+    .app-shell {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 1rem;
+      min-height: 100dvh;
+    }
+    .app-controls {
+      flex: 0 0 auto;
+      width: fit-content;
+      max-width: 100%;
+      overflow-y: auto;
+      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      display: flex;
+      flex-direction: column;
+    }
+    .app-viewer {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+    #viewer-root {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    @media (max-width: 720px) {
+      .app-shell {
+        flex-direction: column;
+      }
+      .app-controls {
+        width: 100%;
+      }
+      .app-viewer {
+        order: -1;
+        min-height: 42vh;
+      }
+    }
     .target {
       font-size: clamp(1.75rem, 6vw, 2.25rem);
       font-weight: 700;
@@ -98,20 +139,35 @@ _INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 1.25rem;
       min-height: 1.5em;
     }
-    button.cycle {
-      width: 100%;
-      padding: 1rem 1.25rem;
-      font-size: 1.125rem;
+    .target-buttons-label {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    .target-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, max-content);
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      width: max-content;
+      max-width: 100%;
+    }
+    button.target-btn {
+      padding: 0.75rem 0.65rem;
+      font-size: 0.9375rem;
       font-weight: 600;
-      border: none;
-      border-radius: 12px;
-      background: var(--accent);
-      color: #fff;
+      border: 1px solid rgba(61, 156, 240, 0.45);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
-      margin-bottom: 1.25rem;
     }
-    button.cycle:active { opacity: 0.85; }
+    button.target-btn.active {
+      border-color: var(--accent);
+      background: rgba(61, 156, 240, 0.22);
+    }
+    button.target-btn:active { opacity: 0.85; }
     .time-scale {
       margin-bottom: 1.25rem;
     }
@@ -120,21 +176,15 @@ _INDEX_HTML = """<!DOCTYPE html>
       color: var(--muted);
       margin-bottom: 0.5rem;
     }
-    .time-scale-current {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.75rem;
-      line-height: 1.35;
-    }
     .time-scale-buttons {
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       gap: 0.5rem;
-      overflow-x: auto;
+      width: max-content;
+      max-width: 100%;
     }
     button.time-scale {
-      flex: 1 1 0;
-      min-width: max-content;
+      flex: 0 0 auto;
       padding: 0.75rem 0.5rem;
       font-size: 0.8125rem;
       font-weight: 600;
@@ -155,7 +205,32 @@ _INDEX_HTML = """<!DOCTYPE html>
       background: rgba(40, 80, 55, 0.45);
     }
     button.time-scale:active { opacity: 0.85; }
-    .logs-label { font-size: 0.875rem; color: var(--muted); margin-bottom: 0.5rem; }
+    details.logs-panel {
+      width: max-content;
+      max-width: 100%;
+    }
+    details.logs-panel summary.logs-label {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    details.logs-panel summary.logs-label::-webkit-details-marker {
+      display: none;
+    }
+    details.logs-panel summary.logs-label::before {
+      content: "▸ ";
+      display: inline-block;
+      width: 1em;
+    }
+    details.logs-panel[open] summary.logs-label::before {
+      content: "▾ ";
+    }
+    details.logs-panel[open] summary.logs-label {
+      margin-bottom: 0.5rem;
+    }
     pre.logs {
       margin: 0;
       padding: 0.75rem;
@@ -164,18 +239,18 @@ _INDEX_HTML = """<!DOCTYPE html>
       font-size: 0.75rem;
       line-height: 1.45;
       overflow: auto;
-      max-height: 45vh;
+      max-height: min(45vh, 18rem);
+      min-height: 6rem;
       white-space: pre-wrap;
       word-break: break-word;
     }
   </style>
 </head>
 <body>
-  <div id="viewer-root"></div>
-  <script type="module" src="__VIEWER_SCRIPT__"></script>
+  <div class="app-shell">
+  <div class="app-controls">
   <div class="time-scale">
     <div class="time-scale-label">Simulation time</div>
-    <div class="time-scale-current" id="sim-time">—</div>
     <div class="time-scale-buttons">
       <button type="button" class="time-scale" data-preset="realtime">Realtime</button>
       <button type="button" class="time-scale" data-preset="minute">1 min / s</button>
@@ -187,19 +262,35 @@ _INDEX_HTML = """<!DOCTYPE html>
   </div>
   <div class="target" id="target">—</div>
   <div class="speed" id="speed"></div>
-  <button type="button" class="cycle" id="cycle">Next target</button>
-  <div class="logs-label">Log</div>
-  <pre class="logs" id="logs"></pre>
+  <div class="target-buttons-label">Pointing target</div>
+  <div class="target-buttons" id="target-buttons">
+__TARGET_BUTTONS__
+  </div>
+  <details class="logs-panel">
+    <summary class="logs-label">Log</summary>
+    <pre class="logs" id="logs"></pre>
+  </details>
+  </div>
+  <div class="app-viewer">
+  <div id="viewer-root"></div>
+  <script type="module" src="__VIEWER_SCRIPT__"></script>
+  </div>
+  </div>
   <script>
     const targetEl = document.getElementById("target");
     const speedEl = document.getElementById("speed");
     const logsEl = document.getElementById("logs");
-    const cycleBtn = document.getElementById("cycle");
-    const simTimeEl = document.getElementById("sim-time");
     const timeScaleButtons = document.querySelectorAll("button.time-scale");
+    const targetButtons = document.querySelectorAll("button.target-btn");
+
+    function applyTargetUi(data) {
+      targetEl.textContent = data.target_label;
+      for (const btn of targetButtons) {
+        btn.classList.toggle("active", btn.dataset.target === data.target);
+      }
+    }
 
     function applyTimeScaleUi(data) {
-      simTimeEl.textContent = data.label + " · " + data.time_iso;
       for (const btn of timeScaleButtons) {
         const preset = btn.dataset.preset;
         const active =
@@ -241,7 +332,7 @@ _INDEX_HTML = """<!DOCTYPE html>
     async function refresh() {
       const res = await fetch("/api/status");
       const data = await res.json();
-      targetEl.textContent = data.target_label;
+      applyTargetUi(data);
       if (data.speed_km_h != null) {
         speedEl.textContent = "Surface speed: " + data.speed_km_h.toFixed(2) + " km/h";
       } else {
@@ -251,15 +342,27 @@ _INDEX_HTML = """<!DOCTYPE html>
       logsEl.scrollTop = logsEl.scrollHeight;
     }
 
-    cycleBtn.addEventListener("click", async () => {
-      cycleBtn.disabled = true;
+    async function setTarget(target) {
+      for (const btn of targetButtons) {
+        btn.disabled = true;
+      }
       try {
-        await fetch("/api/cycle", { method: "POST" });
+        await fetch("/api/target", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target }),
+        });
         await refresh();
       } finally {
-        cycleBtn.disabled = false;
+        for (const btn of targetButtons) {
+          btn.disabled = false;
+        }
       }
-    });
+    }
+
+    for (const btn of targetButtons) {
+      btn.addEventListener("click", () => setTarget(btn.dataset.target));
+    }
 
     refresh();
     refreshTimeScale();
@@ -351,12 +454,22 @@ def navigator_session_id() -> str:
     return _navigator_session_id
 
 
+def _target_buttons_html() -> str:
+    lines: list[str] = []
+    for target in PointingTarget:
+        lines.append(
+            f'    <button type="button" class="target-btn" data-target="{target.value}">{target.label}</button>'
+        )
+    return "\n".join(lines)
+
+
 def _index_html() -> str:
     session = navigator_session_id()
     return (
         _INDEX_HTML.replace("__VIEWER_SCRIPT__", f"/viewer.js?v={session}")
         .replace("__POLL_MS__", str(_STATUS_POLL_MS))
         .replace("__SESSION_POLL_MS__", str(_SESSION_POLL_MS))
+        .replace("__TARGET_BUTTONS__", _target_buttons_html())
     )
 
 
@@ -426,7 +539,13 @@ def _http_response(
     *,
     extra_headers: dict[str, str] | None = None,
 ) -> bytes:
-    reason = {200: "OK", 204: "No Content", 404: "Not Found", 405: "Method Not Allowed"}[status]
+    reason = {
+        200: "OK",
+        204: "No Content",
+        400: "Bad Request",
+        404: "Not Found",
+        405: "Method Not Allowed",
+    }[status]
     header = f"HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n"
     for key, value in (extra_headers or {}).items():
         header += f"{key}: {value}\r\n"
@@ -488,9 +607,17 @@ async def _handle_client(
             else:
                 payload = json.dumps(time_scale_status_payload()).encode("utf-8")
                 writer.write(_http_response(200, payload, "application/json"))
-        elif route == "/api/cycle" and method == "POST":
-            buttons.cycle_pointing_target()
-            writer.write(_http_response(204, b"", "text/plain"))
+        elif route == "/api/target" and method == "POST":
+            try:
+                data = json.loads(body.decode("utf-8"))
+                target_value = data["target"]
+                if not isinstance(target_value, str):
+                    raise ValueError("target must be a string")
+                buttons.select_target(PointingTarget(target_value))
+            except (KeyError, ValueError, json.JSONDecodeError):
+                writer.write(_http_response(400, b"bad request", "text/plain"))
+            else:
+                writer.write(_http_response(204, b"", "text/plain"))
         elif method == "GET":
             writer.write(_http_response(404, b"Not found", "text/plain"))
         else:

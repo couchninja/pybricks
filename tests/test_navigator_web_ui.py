@@ -6,6 +6,7 @@ import pytest
 from gpio.button_menu_host import HostButtonMenu
 from navigator.web_ui import (
     LogBuffer,
+    _index_html,
     _status_payload,
     begin_navigator_session,
     capture_stdout,
@@ -21,6 +22,14 @@ def menu_without_gpio() -> Iterator[HostButtonMenu]:
     menu.__enter__()
     yield menu
     menu.__exit__(None, None, None)
+
+
+def test_index_html_includes_target_buttons() -> None:
+    html = _index_html()
+    for target in PointingTarget:
+        assert f'data-target="{target.value}"' in html
+        assert target.label in html
+    assert "Next target" not in html
 
 
 def test_status_payload_includes_target_and_logs(menu_without_gpio: HostButtonMenu) -> None:

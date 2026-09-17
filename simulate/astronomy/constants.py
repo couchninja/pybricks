@@ -27,6 +27,11 @@ GALACTIC_ORBIT_DISTANCE_SCALE = 1e-7
 # GALACTIC_ORBIT_DISTANCE_SCALE = 1e-9
 
 EARTH_ORBIT_SEGMENTS = 360 * 5
+# Mean heliocentric orbital radius (AU); Earth's orbit in the scene uses true ephemeris scale.
+EARTH_ORBIT_RADIUS_AU = float((1 * u.au).to_value(u.au))
+# Web skybox fade: full opacity until start multiple; then fades over span multiple (both × orbit radius).
+SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE = 10.0
+SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE = 10.0
 
 SUN_RADIUS_AU = REAL_SUN_RADIUS_AU * SUN_SIZE_EXAGGERATION
 EARTH_RADIUS_AU = REAL_EARTH_RADIUS_AU * EARTH_SIZE_EXAGGERATION

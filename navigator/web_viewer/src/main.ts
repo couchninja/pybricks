@@ -19,16 +19,18 @@ function mountStyles(): void {
     .earth-sun-viewer {
       position: relative;
       width: 100%;
-      min-height: 42vh;
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
       border-radius: 12px;
       overflow: hidden;
       background: #0a0e12;
-      margin-bottom: 1.25rem;
     }
     .earth-sun-viewer-canvas {
       position: relative;
       width: 100%;
-      height: min(52vh, 520px);
+      height: 100%;
+      min-height: 240px;
     }
     .earth-sun-viewer-canvas canvas {
       display: block;

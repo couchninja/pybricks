@@ -5,6 +5,9 @@ import { BRIGHT_STARS, CONSTELLATION_LINE_SEGMENTS } from "./constellation-data"
 
 const J2000_OBLIQUITY_RAD = (23.4392911 * Math.PI) / 180;
 const SKY_FAR_FRACTION = 0.92;
+const BACKDROP_OPACITY = 1;
+const STARS_OPACITY = 0.92;
+const LINES_OPACITY = 0.42;
 
 /** J2000 equatorial centroids for named constellations (degrees). */
 const NAMED_CONSTELLATION_LABELS: readonly {
@@ -54,7 +57,7 @@ function buildStarPoints(radius: number): THREE.Points {
     size: starPointSize(2.5),
     sizeAttenuation: false,
     transparent: true,
-    opacity: 0.92,
+    opacity: STARS_OPACITY,
     depthWrite: false,
   });
   const points = new THREE.Points(geometry, material);
@@ -82,7 +85,7 @@ function buildConstellationLines(radius: number): THREE.LineSegments {
   const material = new THREE.LineBasicMaterial({
     color: 0x5a7aa8,
     transparent: true,
-    opacity: 0.42,
+    opacity: LINES_OPACITY,
     depthWrite: false,
   });
   const lines = new THREE.LineSegments(geometry, material);
@@ -135,8 +138,33 @@ export type ConstellationSky = {
   labels: readonly CSS2DObject[];
   setInertialToRootRotation: (values: number[] | undefined) => void;
   setRadius: (radius: number) => void;
+  setOpacity: (opacity: number) => void;
   radiusForCameraFar: (far: number) => number;
 };
+
+function smoothstep01(t: number): number {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
+export function skyOpacityForCameraDistance(
+  cameraDistanceAu: number,
+  earthOrbitRadiusAu: number,
+  fadeStartOrbitMultiple: number,
+  fadeSpanOrbitMultiple: number,
+): number {
+  const fadeStart = fadeStartOrbitMultiple * earthOrbitRadiusAu;
+  if (cameraDistanceAu <= fadeStart) {
+    return 1;
+  }
+  const fadeSpan = fadeSpanOrbitMultiple * earthOrbitRadiusAu;
+  const fadeEnd = fadeStart + fadeSpan;
+  if (cameraDistanceAu >= fadeEnd || fadeSpan <= 0) {
+    return 0;
+  }
+  const linear = (cameraDistanceAu - fadeStart) / fadeSpan;
+  return 1 - smoothstep01(linear);
+}
 
 const ORIENTATION_MATRIX = new THREE.Matrix4();
 
@@ -181,6 +209,18 @@ export function createConstellationSky(initialRadius: number): ConstellationSky 
     shell.scale.setScalar(radius);
   };
 
+  const backdropMaterial = backdrop.material as THREE.MeshBasicMaterial;
+  const starsMaterial = stars.material as THREE.PointsMaterial;
+  const linesMaterial = lines.material as THREE.LineBasicMaterial;
+
+  const setOpacity = (opacity: number): void => {
+    const clamped = Math.max(0, Math.min(1, opacity));
+    backdropMaterial.transparent = clamped < 1;
+    backdropMaterial.opacity = BACKDROP_OPACITY * clamped;
+    starsMaterial.opacity = STARS_OPACITY * clamped;
+    linesMaterial.opacity = LINES_OPACITY * clamped;
+  };
+
   const setInertialToRootRotation = (values: number[] | undefined): void => {
     if (values === undefined || values.length !== 9) {
       inertialToRoot.identity();
@@ -197,6 +237,7 @@ export function createConstellationSky(initialRadius: number): ConstellationSky 
     },
     setInertialToRootRotation,
     setRadius,
+    setOpacity,
     radiusForCameraFar: (far: number) => far * SKY_FAR_FRACTION,
   };
 }

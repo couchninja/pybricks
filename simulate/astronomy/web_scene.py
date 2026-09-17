@@ -12,11 +12,14 @@ from trimesh.transformations import transform_points
 
 from simulate.astronomy.constants import (
     CAMERA_DISTANCE_EARTH_RADII,
+    EARTH_ORBIT_RADIUS_AU,
     EARTH_RADIUS_AU,
     OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
     OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     ROOT_FRAME,
+    SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
+    SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
     PointingTarget,
 )
 from simulate.astronomy.earth_sun_scene import (
@@ -134,6 +137,9 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         "camera_distance_au": default_camera_distance,
         "default_camera_distance_au": default_camera_distance,
         "earth_radius_au": EARTH_RADIUS_AU,
+        "earth_orbit_radius_au": EARTH_ORBIT_RADIUS_AU,
+        "skybox_fade_camera_distance_orbit_multiple": SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
+        "skybox_fade_span_orbit_radius_multiple": SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
         "arrow_mesh_length_au": OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU,
         "arrow_length_camera_distance_fraction": OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
         "arrow_min_length_au": OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * 2 * EARTH_RADIUS_AU,
