@@ -12,6 +12,9 @@ import type {
   SceneSnapshot,
 } from "./scene-types";
 
+const VIEWER_TARGET_FPS = 60;
+const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
+
 const LABEL_OFFSET_BODY_RADII = 2.5;
 const BODY_LABEL_COLORS: Record<string, string> = {
   sun: "rgb(255, 210, 60)",
@@ -113,11 +116,13 @@ export class EarthSunViewer {
   private arrowMinLengthAu = 0;
   private readonly captionEl: HTMLDivElement;
   private readonly fpsEl: HTMLDivElement;
-  private readonly pointingTargetEl: HTMLDivElement;
   private defaultCameraDistance = 1;
   private earthRadiusAu = 1;
   private sceneScale = 1;
   private animationId = 0;
+  private lastRenderTime = 0;
+  private geometryPollIntervalMs = VIEWER_FRAME_MS;
+  private cameraMotionUntil = 0;
   private fpsFrames = 0;
   private fpsIntervalStart = performance.now();
   private fpsDisplay = 0;
@@ -140,10 +145,6 @@ export class EarthSunViewer {
     this.fpsEl.className = "earth-sun-viewer-fps";
     canvasHost.appendChild(this.fpsEl);
 
-    this.pointingTargetEl = document.createElement("div");
-    this.pointingTargetEl.className = "earth-sun-viewer-pointing-target";
-    canvasHost.appendChild(this.pointingTargetEl);
-
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0e12);
 
@@ -165,6 +166,7 @@ export class EarthSunViewer {
     this.controls.dampingFactor = 0.08;
     this.controls.target.set(0, 0, 0);
     this.controls.addEventListener("change", () => {
+      this.cameraMotionUntil = performance.now() + 250;
       this.syncClipPlanes();
       this.layoutArrows();
     });
@@ -177,6 +179,10 @@ export class EarthSunViewer {
     window.addEventListener("resize", this.onResize);
     this.onResize();
     this.animate();
+  }
+
+  setGeometryPollIntervalMs(intervalMs: number): void {
+    this.geometryPollIntervalMs = intervalMs;
   }
 
   dispose(): void {
@@ -199,7 +205,6 @@ export class EarthSunViewer {
     this.arrowMinLengthAu = snapshot.arrow_min_length_au;
     this.sceneScale = snapshot.scene_scale;
     this.captionEl.textContent = `Earth-sun (${snapshot.time_iso})`;
-    this.pointingTargetEl.textContent = snapshot.pointing_target_label;
 
     for (const body of snapshot.bodies) {
       this.updateBody(body);
@@ -217,6 +222,7 @@ export class EarthSunViewer {
       this.resetCamera();
       this.hasInitialCamera = true;
     }
+    this.lastRenderTime = 0;
   }
 
   private updateBody(body: SceneBody): void {
@@ -398,9 +404,21 @@ export class EarthSunViewer {
     }
   };
 
+  private renderIntervalMs(now: number): number {
+    if (now < this.cameraMotionUntil) {
+      return VIEWER_FRAME_MS;
+    }
+    return this.geometryPollIntervalMs;
+  }
+
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate);
     this.controls.update();
+    const now = performance.now();
+    if (now - this.lastRenderTime < this.renderIntervalMs(now)) {
+      return;
+    }
+    this.lastRenderTime = now;
     this.layoutArrows();
     this.syncClipPlanes();
     this.updateLabels();

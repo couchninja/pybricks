@@ -1,7 +1,17 @@
 import { EarthSunViewer } from "./earth-sun-viewer";
 import type { SceneSnapshot } from "./scene-types";
 
-const SCENE_POLL_MS = 1000 / 30;
+const SCENE_POLL_REALTIME_MS = 1000;
+const SCENE_POLL_FAST_MS = 1000 / 30;
+const TIME_SCALE_POLL_MS = 500;
+
+type TimeScaleStatus = {
+  preset: string | null;
+};
+
+function scenePollIntervalMs(preset: string | null): number {
+  return preset === "realtime" ? SCENE_POLL_REALTIME_MS : SCENE_POLL_FAST_MS;
+}
 
 function mountStyles(): void {
   const style = document.createElement("style");
@@ -47,21 +57,6 @@ function mountStyles(): void {
       pointer-events: none;
       z-index: 2;
     }
-    .earth-sun-viewer-pointing-target {
-      position: absolute;
-      right: 8px;
-      bottom: 8px;
-      min-width: 180px;
-      padding: 8px 12px;
-      border-radius: 8px;
-      border: 1px solid rgba(80, 220, 255, 0.9);
-      background: rgba(40, 44, 52, 0.88);
-      color: rgb(80, 220, 255);
-      font: 600 14px system-ui, sans-serif;
-      text-align: center;
-      pointer-events: none;
-      z-index: 2;
-    }
   `;
   document.head.appendChild(style);
 }
@@ -74,12 +69,49 @@ async function fetchScene(): Promise<SceneSnapshot> {
   return response.json() as Promise<SceneSnapshot>;
 }
 
+async function fetchTimeScaleStatus(): Promise<TimeScaleStatus | null> {
+  try {
+    const response = await fetch("/api/time-scale");
+    if (!response.ok) {
+      return null;
+    }
+    return response.json() as Promise<TimeScaleStatus>;
+  } catch {
+    return null;
+  }
+}
+
 export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
   mountStyles();
   const viewer = new EarthSunViewer(mount);
+  viewer.setGeometryPollIntervalMs(SCENE_POLL_FAST_MS);
 
+  let scenePollMs = SCENE_POLL_FAST_MS;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
-  const poll = async (): Promise<void> => {
+
+  const applyScenePollMs = (nextMs: number): void => {
+    if (nextMs === scenePollMs) {
+      return;
+    }
+    scenePollMs = nextMs;
+    viewer.setGeometryPollIntervalMs(nextMs);
+    if (pollTimer !== null) {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
+      scheduleNextScenePoll();
+    }
+  };
+
+  const refreshScenePollRate = async (): Promise<void> => {
+    const status = await fetchTimeScaleStatus();
+    if (status === null) {
+      return;
+    }
+    applyScenePollMs(scenePollIntervalMs(status.preset));
+  };
+
+  const pollScene = async (): Promise<void> => {
     if (inFlight) {
       return;
     }
@@ -94,10 +126,23 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
     }
   };
 
-  void poll();
+  const scheduleNextScenePoll = (): void => {
+    pollTimer = window.setTimeout(() => {
+      pollTimer = null;
+      void pollScene().finally(() => {
+        scheduleNextScenePoll();
+      });
+    }, scenePollMs);
+  };
+
+  void refreshScenePollRate().then(() => {
+    void pollScene().finally(() => {
+      scheduleNextScenePoll();
+    });
+  });
   window.setInterval(() => {
-    void poll();
-  }, SCENE_POLL_MS);
+    void refreshScenePollRate();
+  }, TIME_SCALE_POLL_MS);
 
   return viewer;
 }

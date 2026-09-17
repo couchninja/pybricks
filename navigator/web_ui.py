@@ -14,10 +14,13 @@ from typing import TYPE_CHECKING
 from astropy import units as u
 
 from simulate.astronomy.constants import PointingTarget
-from simulate.astronomy.utils.ephemeris import (
-    current_time,
-    observer_surface_vector_and_euler_angles_for_target,
+from simulate.astronomy.simulation_clock import (
+    set_time_scale_preset,
+    simulation_time,
+    sync_to_realtime,
+    time_scale_status_payload,
 )
+from simulate.astronomy.utils.ephemeris import observer_surface_vector_and_euler_angles_for_target
 from simulate.astronomy.web_scene import scene_snapshot_payload
 
 if TYPE_CHECKING:
@@ -61,7 +64,7 @@ _INDEX_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Navigator</title>
+  <title>Earth-sun viewer</title>
   <style>
     :root {
       color-scheme: dark light;
@@ -82,7 +85,6 @@ _INDEX_HTML = """<!DOCTYPE html>
       color: var(--text);
       min-height: 100dvh;
     }
-    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; color: var(--muted); }
     #viewer-root { min-height: 42vh; }
     .target {
       font-size: clamp(1.75rem, 6vw, 2.25rem);
@@ -110,6 +112,46 @@ _INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 1.25rem;
     }
     button.cycle:active { opacity: 0.85; }
+    .time-scale {
+      margin-bottom: 1.25rem;
+    }
+    .time-scale-label {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    .time-scale-current {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      line-height: 1.35;
+    }
+    .time-scale-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+    button.time-scale {
+      padding: 0.75rem 0.65rem;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      border: 1px solid rgba(61, 156, 240, 0.45);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    button.time-scale.active {
+      border-color: var(--accent);
+      background: rgba(61, 156, 240, 0.22);
+    }
+    button.time-scale-now {
+      grid-column: 1 / -1;
+      border-color: rgba(120, 220, 160, 0.55);
+      background: rgba(40, 80, 55, 0.45);
+    }
+    button.time-scale:active { opacity: 0.85; }
     .logs-label { font-size: 0.875rem; color: var(--muted); margin-bottom: 0.5rem; }
     pre.logs {
       margin: 0;
@@ -126,9 +168,19 @@ _INDEX_HTML = """<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>Navigator</h1>
   <div id="viewer-root"></div>
   <script type="module" src="__VIEWER_SCRIPT__"></script>
+  <div class="time-scale">
+    <div class="time-scale-label">Simulation time</div>
+    <div class="time-scale-current" id="sim-time">—</div>
+    <div class="time-scale-buttons">
+      <button type="button" class="time-scale" data-preset="realtime">Realtime</button>
+      <button type="button" class="time-scale" data-preset="hour">1 hour / s</button>
+      <button type="button" class="time-scale" data-preset="day">1 day / s</button>
+      <button type="button" class="time-scale" data-preset="month">1 month / s</button>
+      <button type="button" class="time-scale time-scale-now" data-preset="now">Now (realtime)</button>
+    </div>
+  </div>
   <div class="target" id="target">—</div>
   <div class="speed" id="speed"></div>
   <button type="button" class="cycle" id="cycle">Next target</button>
@@ -139,6 +191,48 @@ _INDEX_HTML = """<!DOCTYPE html>
     const speedEl = document.getElementById("speed");
     const logsEl = document.getElementById("logs");
     const cycleBtn = document.getElementById("cycle");
+    const simTimeEl = document.getElementById("sim-time");
+    const timeScaleButtons = document.querySelectorAll("button.time-scale");
+
+    function applyTimeScaleUi(data) {
+      simTimeEl.textContent = data.label + " · " + data.time_iso;
+      for (const btn of timeScaleButtons) {
+        const preset = btn.dataset.preset;
+        const active =
+          preset === "now"
+            ? data.preset === "realtime"
+            : preset === data.preset;
+        btn.classList.toggle("active", active);
+      }
+    }
+
+    async function refreshTimeScale() {
+      const res = await fetch("/api/time-scale");
+      const data = await res.json();
+      applyTimeScaleUi(data);
+    }
+
+    async function setTimeScale(preset) {
+      for (const btn of timeScaleButtons) {
+        btn.disabled = true;
+      }
+      try {
+        await fetch("/api/time-scale", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preset }),
+        });
+        await refreshTimeScale();
+      } finally {
+        for (const btn of timeScaleButtons) {
+          btn.disabled = false;
+        }
+      }
+    }
+
+    for (const btn of timeScaleButtons) {
+      btn.addEventListener("click", () => setTimeScale(btn.dataset.preset));
+    }
 
     async function refresh() {
       const res = await fetch("/api/status");
@@ -164,7 +258,9 @@ _INDEX_HTML = """<!DOCTYPE html>
     });
 
     refresh();
+    refreshTimeScale();
     setInterval(refresh, __POLL_MS__);
+    setInterval(refreshTimeScale, 500);
 
     let navigatorSession = null;
     async function pollNavigatorSession() {
@@ -266,7 +362,7 @@ def _request_path(path: str) -> str:
 
 def _status_payload(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> dict[str, object]:
     target = buttons.selected_button["target"]
-    _surface, _euler, speed_au_s = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
+    _surface, _euler, speed_au_s = observer_surface_vector_and_euler_angles_for_target(simulation_time(), target)
     speed_km_h: float | None = None
     if target not in _BODY_TARGETS:
         speed_km_s = speed_au_s * (1 * u.au).to_value(u.km)
@@ -279,14 +375,29 @@ def _status_payload(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> dict[
     }
 
 
-async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str]:
+async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes]:
     header = await reader.readuntil(b"\r\n\r\n")
     first_line = header.split(b"\r\n", 1)[0].decode("utf-8", errors="replace")
     parts = first_line.split()
     if len(parts) < 2:
         raise ValueError("bad request line")
     method, path = parts[0], parts[1]
-    return method, path
+    body = b""
+    content_length = 0
+    for line in header.split(b"\r\n")[1:]:
+        if line.lower().startswith(b"content-length:"):
+            content_length = int(line.split(b":", 1)[1].strip())
+            break
+    if content_length > 0:
+        body = await reader.readexactly(content_length)
+    return method, path, body
+
+
+def _apply_time_scale_preset(preset: str) -> None:
+    if preset == "now":
+        sync_to_realtime()
+        return
+    set_time_scale_preset(preset)
 
 
 def _viewer_asset(path: str) -> tuple[bytes, str] | None:
@@ -326,7 +437,7 @@ async def _handle_client(
     log_buffer: LogBuffer,
 ) -> None:
     try:
-        method, path = await _read_request(reader)
+        method, path, body = await _read_request(reader)
         route = _request_path(path)
         if route == "/" and method == "GET":
             body = _index_html().encode("utf-8")
@@ -358,6 +469,21 @@ async def _handle_client(
             target = buttons.selected_button["target"]
             payload = json.dumps(scene_snapshot_payload(target)).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json"))
+        elif route == "/api/time-scale" and method == "GET":
+            payload = json.dumps(time_scale_status_payload()).encode("utf-8")
+            writer.write(_http_response(200, payload, "application/json"))
+        elif route == "/api/time-scale" and method == "POST":
+            try:
+                data = json.loads(body.decode("utf-8"))
+                preset = data["preset"]
+                if not isinstance(preset, str):
+                    raise ValueError("preset must be a string")
+                _apply_time_scale_preset(preset)
+            except (KeyError, ValueError, json.JSONDecodeError):
+                writer.write(_http_response(400, b"bad request", "text/plain"))
+            else:
+                payload = json.dumps(time_scale_status_payload()).encode("utf-8")
+                writer.write(_http_response(200, payload, "application/json"))
         elif route == "/api/cycle" and method == "POST":
             buttons.cycle_pointing_target()
             writer.write(_http_response(204, b"", "text/plain"))
