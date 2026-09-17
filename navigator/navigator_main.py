@@ -32,7 +32,7 @@ CLOCK_WAIT_POLL_S = 5.0
 RECONNECT_DELAY_S = 2.0
 PAN_DUTY_LIMIT = 150
 TILT_DUTY_LIMIT = 200
-MIN_TARGET_ANGLE_DELTA = 2
+MIN_TARGET_ANGLE_DELTA = 1
 # Make sure this matches the ports in pybricks_hub/thin_ble_hub.py and the script is on the brick
 EXTERNAL_MOTOR_PORT = Port.D
 SENSOR_PORT = Port.C

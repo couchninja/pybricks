@@ -43,6 +43,7 @@ wifi-list = "nmcli -f NAME,UUID,TYPE,DEVICE,STATE,AUTOCONNECT,AUTOCONNECT-PRIORI
 [dependencies]
 micropython = ">=1.28.0,<2"
 python = ">=3.13,<3.14"
+nodejs = ">=26.8.2,<26.9"
 
 [pypi-dependencies]
 # Host-side API stubs for editing hub programs (Color, Port, etc.).

@@ -11,12 +11,14 @@ from astropy.time import Time
 from simulate.astronomy.utils.ephemeris import current_time
 
 TIME_SCALE_REALTIME = 1.0
+TIME_SCALE_ONE_MINUTE_PER_SECOND = 60.0
 TIME_SCALE_ONE_HOUR_PER_SECOND = 3600.0
 TIME_SCALE_ONE_DAY_PER_SECOND = 86_400.0
 TIME_SCALE_ONE_MONTH_PER_SECOND = 86_400.0 * 30.0
 
 TIME_SCALE_PRESETS: dict[str, float] = {
     "realtime": TIME_SCALE_REALTIME,
+    "minute": TIME_SCALE_ONE_MINUTE_PER_SECOND,
     "hour": TIME_SCALE_ONE_HOUR_PER_SECOND,
     "day": TIME_SCALE_ONE_DAY_PER_SECOND,
     "month": TIME_SCALE_ONE_MONTH_PER_SECOND,
@@ -24,6 +26,7 @@ TIME_SCALE_PRESETS: dict[str, float] = {
 
 TIME_SCALE_LABELS: dict[str, str] = {
     "realtime": "Realtime",
+    "minute": "1 minute / second",
     "hour": "1 hour / second",
     "day": "1 day / second",
     "month": "1 month / second",

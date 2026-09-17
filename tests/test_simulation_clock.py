@@ -6,6 +6,7 @@ from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.simulation_clock import (
     TIME_SCALE_ONE_DAY_PER_SECOND,
     TIME_SCALE_ONE_HOUR_PER_SECOND,
+    TIME_SCALE_ONE_MINUTE_PER_SECOND,
     reset_simulation_clock,
     set_time_scale_preset,
     set_time_scaling,
@@ -25,6 +26,12 @@ def test_set_preset_changes_scaling() -> None:
     reset_simulation_clock()
     set_time_scale_preset("day")
     assert time_scaling() == TIME_SCALE_ONE_DAY_PER_SECOND
+
+
+def test_minute_preset_scaling() -> None:
+    reset_simulation_clock()
+    set_time_scale_preset("minute")
+    assert time_scaling() == TIME_SCALE_ONE_MINUTE_PER_SECOND
 
 
 def test_sync_to_realtime_resets_scale() -> None:
