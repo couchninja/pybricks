@@ -87,6 +87,7 @@ class ButtonMenu:
         self._mode_indices = [0] * len(buttons)
         self._selected_index = DEFAULT_BUTTON_INDEX
         self._request: gpiod.LineRequest | None = None
+        self._wake = asyncio.Event()
 
     def __enter__(self) -> ButtonMenu:
         self._request = gpiod.request_lines(
@@ -122,6 +123,24 @@ class ButtonMenu:
         self._mode_indices = [0] * len(self._buttons)
         self._show_selection()
 
+    def cycle_pointing_target(self) -> None:
+        """Advance to the next ``PointingTarget`` (same order as the astronomy viewer)."""
+        targets = list(PointingTarget)
+        current = self.selected_button["target"]
+        next_target = targets[(targets.index(current) + 1) % len(targets)]
+        self.select_target(next_target)
+
+    def select_target(self, target: PointingTarget) -> None:
+        for index, button in enumerate(self._buttons):
+            for mode_index, mode in enumerate(button["modes"]):
+                if mode["target"] == target:
+                    self._selected_index = index
+                    self._mode_indices[index] = mode_index
+                    self._show_selection()
+                    self._wake.set()
+                    return
+        raise ValueError(f"No button mode for {target!r}")
+
     async def wait_for_selection(self, *, timeout_s: float) -> None:
         """Wait for a press or the timeout, discarding presses made before this call.
 
@@ -136,8 +155,12 @@ class ButtonMenu:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return
-            if not await asyncio.to_thread(request.wait_edge_events, remaining):
+            if self._wake.is_set():
+                self._wake.clear()
                 return
+            slice_s = min(remaining, 0.2)
+            if not await asyncio.to_thread(request.wait_edge_events, slice_s):
+                continue
             for event in request.read_edge_events():
                 index = self._index_by_pin.get(event.line_offset)
                 if index is not None:
@@ -147,6 +170,7 @@ class ButtonMenu:
     @asynccontextmanager
     async def blinking_selected(self) -> AsyncIterator[None]:
         """Blink the selected LED while the navigator is busy."""
+        self._show_selection()
         led_pin = self._buttons[self._selected_index]["led_pin"]
         task = asyncio.create_task(self._blink_led(led_pin))
         try:
@@ -171,11 +195,12 @@ class ButtonMenu:
             request.read_edge_events()
 
     async def _blink_led(self, led_pin: int) -> None:
-        on = False
+        self._set_led(led_pin, True)
+        on = True
         while True:
+            await asyncio.sleep(BLINK_PERIOD_S)
             on = not on
             self._set_led(led_pin, on)
-            await asyncio.sleep(BLINK_PERIOD_S)
 
     def _show_selection(self) -> None:
         for index, button in enumerate(self._buttons):

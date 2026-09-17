@@ -1,5 +1,6 @@
 """Button menu selection logic, exercised without GPIO hardware."""
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -91,6 +92,25 @@ async def test_presses_while_busy_are_dropped() -> None:
         await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
         assert menu.selected_button["target"] == PointingTarget.EARTH_ROTATION
         assert lit_pins(request) == {DEFAULT_LED_PIN}
+
+
+async def test_cycle_pointing_target_steps_through_enum() -> None:
+    with fake_menu() as (menu, request):
+        assert menu.selected_button["target"] == PointingTarget.EARTH_ROTATION
+        menu.cycle_pointing_target()
+        assert menu.selected_button["target"] == PointingTarget.SUN_ORBIT
+        menu.cycle_pointing_target()
+        assert menu.selected_button["target"] == PointingTarget.MILKY_WAY_ORBIT
+
+
+async def test_web_cycle_wakes_wait_for_selection() -> None:
+    with fake_menu() as (menu, request):
+        wait_task = asyncio.create_task(menu.wait_for_selection(timeout_s=5.0))
+        await asyncio.sleep(0.05)
+        assert not wait_task.done()
+        menu.cycle_pointing_target()
+        await asyncio.wait_for(wait_task, timeout=1.0)
+        assert menu.selected_button["target"] == PointingTarget.SUN_ORBIT
 
 
 async def test_reset_restores_default() -> None:
