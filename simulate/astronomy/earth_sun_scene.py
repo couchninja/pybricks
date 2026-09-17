@@ -5,7 +5,7 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, moon, iss, observer, earth_orbit, year_boundaries, earth_axis
+          sun, earth, moon, iss, observer, earth_orbit, moon_orbit, year_boundaries, earth_axis
         galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
@@ -59,6 +59,8 @@ from simulate.astronomy.constants import (
     KPC_TO_AU,
     MILKY_WAY_FRAME,
     MOON_COLOR,
+    MOON_ORBIT_COLOR,
+    MOON_ORBIT_SEGMENTS,
     MOON_RADIUS_AU,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
@@ -66,7 +68,6 @@ from simulate.astronomy.constants import (
     OBSERVER_VELOCITY_ARROW_HEAD_RADIUS_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
     OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
-    OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE,
     ORBIT_UPDATE_INTERVAL,
@@ -90,6 +91,7 @@ from simulate.astronomy.utils.ephemeris import (
     iss_heliocentric_ecliptic_au,
     milky_way_cmb_direction_galactocentric,
     moon_heliocentric_ecliptic_au,
+    moon_orbit_ecliptic_au,
     observer_direction_ecliptic,
     observer_direction_ecliptic_for_target,
     observer_surface_vector_and_euler_angles_for_target,
@@ -222,6 +224,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ("galactic_orbit", GALACTIC_ORBIT_COLOR),
         ("galactic_axis", GALACTIC_AXIS_COLOR),
         ("earth_orbit", EARTH_ORBIT_COLOR),
+        ("moon_orbit", MOON_ORBIT_COLOR),
         ("year_boundaries", YEAR_BOUNDARY_COLOR),
         ("earth_axis", AXIS_COLOR),
     ):
@@ -301,6 +304,11 @@ def update_earth_sun_scene(
         GALACTIC_AXIS_COLOR,
     )
     _sync_earth_center_frame(scene, state)
+
+    scene.geometry["moon_orbit"] = _colored_path(
+        moon_orbit_ecliptic_au(time, samples=MOON_ORBIT_SEGMENTS),
+        MOON_ORBIT_COLOR,
+    )
 
     if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
         scene.geometry["earth_orbit"] = _colored_path(
@@ -429,10 +437,7 @@ def _velocity_arrow_mesh_length_au() -> float:
 
 
 def _velocity_arrow_length_au(camera_distance_au: float) -> float:
-    return max(
-        camera_distance_au * OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
-        OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * EARTH_RADIUS_AU,
-    )
+    return camera_distance_au * OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION
 
 
 def _observer_velocity_arrow_shaft_start_au() -> float:

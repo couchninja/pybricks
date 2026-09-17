@@ -26,6 +26,7 @@ export type SceneArrow = {
 
 export type SceneSnapshot = {
   time_iso: string;
+  pointing_target: string;
   pointing_target_label: string;
   scene_scale: number;
   camera_distance_au: number;
@@ -36,7 +37,6 @@ export type SceneSnapshot = {
   skybox_fade_span_orbit_radius_multiple: number;
   arrow_mesh_length_au: number;
   arrow_length_camera_distance_fraction: number;
-  arrow_min_length_au: number;
   z_near: number;
   z_far: number;
   /** Maps mean ecliptic directions into the viewer root frame (column-major 3×3). */

@@ -2,6 +2,16 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 
+import {
+  cameraPoseFromState,
+  desiredOrbitTargetCameraPose,
+} from "./camera-orbit-framing";
+import {
+  cameraOrbitTweenActive,
+  tweenCameraToOrbitPose,
+  updateCameraTargetTweens,
+  type CameraOrbitTweenHandle,
+} from "./camera-target-orbit";
 import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
 import { createEarthMesh } from "./earth-mesh";
 import type {
@@ -15,6 +25,7 @@ import type {
 
 const VIEWER_TARGET_FPS = 60;
 const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
+
 
 const LABEL_OFFSET_BODY_RADII = 2.5;
 const SELF_LIT_BODY_EMISSIVE_INTENSITY: Partial<Record<string, number>> = {
@@ -195,7 +206,6 @@ export class EarthSunViewer {
   private arrowMeshLengthAu = 0;
   private arrowEarthRadiusAu = 0;
   private arrowLengthCameraFraction = 0.05;
-  private arrowMinLengthAu = 0;
   private readonly canvasHost: HTMLDivElement;
   private readonly captionEl: HTMLDivElement;
   private readonly fpsEl: HTMLDivElement;
@@ -215,6 +225,9 @@ export class EarthSunViewer {
   private fpsIntervalStart = performance.now();
   private fpsDisplay = 0;
   private hasInitialCamera = false;
+  private lastPointingTarget: string | null = null;
+  private cameraOrbitTween: CameraOrbitTweenHandle | null = null;
+  private cameraOrbitTweenUntil = 0;
 
   constructor(mount: HTMLElement) {
     this.root = document.createElement("div");
@@ -297,7 +310,6 @@ export class EarthSunViewer {
       typeof fraction === "number" && fraction > 0
         ? fraction
         : snapshot.arrow_mesh_length_au / snapshot.default_camera_distance_au;
-    this.arrowMinLengthAu = snapshot.arrow_min_length_au;
     this.sceneScale = snapshot.scene_scale;
     this.constellationSky.setInertialToRootRotation(snapshot.inertial_to_root_rotation);
     if (snapshot.milky_way_diameter_au > 0) {
@@ -319,9 +331,19 @@ export class EarthSunViewer {
     this.syncClipPlanes();
     this.updateLabels();
     this.syncOrbitPivot();
+    const pointingTarget =
+      snapshot.pointing_target ?? snapshot.pointing_target_label ?? "";
+    const targetChanged =
+      this.hasInitialCamera &&
+      this.lastPointingTarget !== null &&
+      pointingTarget !== "" &&
+      pointingTarget !== this.lastPointingTarget;
+    this.lastPointingTarget = pointingTarget;
     if (!this.hasInitialCamera) {
       this.resetCamera();
       this.hasInitialCamera = true;
+    } else if (targetChanged) {
+      this.animateCameraForPointingTarget(snapshot);
     }
     this.lastRenderTime = 0;
   }
@@ -423,11 +445,7 @@ export class EarthSunViewer {
   }
 
   private arrowDisplayLengthAu(cameraDistanceAu: number): number {
-    const length = Math.max(
-      cameraDistanceAu * this.arrowLengthCameraFraction,
-      this.arrowMinLengthAu,
-    );
-    return length * ARROW_LENGTH_BOOST;
+    return cameraDistanceAu * this.arrowLengthCameraFraction * ARROW_LENGTH_BOOST;
   }
 
   private layoutArrows(): void {
@@ -564,7 +582,7 @@ export class EarthSunViewer {
   };
 
   private renderIntervalMs(now: number): number {
-    if (now < this.cameraMotionUntil) {
+    if (now < this.cameraMotionUntil || now < this.cameraOrbitTweenUntil) {
       return VIEWER_FRAME_MS;
     }
     return this.geometryPollIntervalMs;
@@ -572,7 +590,10 @@ export class EarthSunViewer {
 
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate);
-    this.controls.update();
+    updateCameraTargetTweens(performance.now());
+    if (!cameraOrbitTweenActive()) {
+      this.controls.update();
+    }
     const now = performance.now();
     if (now - this.lastRenderTime < this.renderIntervalMs(now)) {
       return;
@@ -604,5 +625,47 @@ export class EarthSunViewer {
     this.controls.target.copy(this.observerPosition);
     this.camera.position.copy(this.observerPosition).add(this.defaultCameraOffset);
     this.controls.update();
+  }
+
+  private bodyWorldPosition(name: string): THREE.Vector3 | null {
+    const entry = this.bodies.get(name);
+    if (!entry) {
+      return null;
+    }
+    return new THREE.Vector3().setFromMatrixPosition(entry.root.matrix);
+  }
+
+  private animateCameraForPointingTarget(snapshot: SceneSnapshot): void {
+    this.cameraOrbitTween?.stop();
+    this.cameraOrbitTween = null;
+
+    const currentOffset = this.camera.position.clone().sub(this.observerPosition);
+    const currentOffsetDirection =
+      currentOffset.lengthSq() > 1e-20
+        ? currentOffset.clone().normalize()
+        : this.defaultCameraOffset.clone().normalize();
+    const startPose = cameraPoseFromState(this.camera, this.observerPosition);
+    const endPose = desiredOrbitTargetCameraPose(
+      this.camera,
+      snapshot,
+      this.observerPosition,
+      (name) => this.bodyWorldPosition(name),
+      currentOffsetDirection,
+      this.controls.maxDistance,
+    );
+    this.cameraOrbitTweenUntil = performance.now() + 1200;
+    this.cameraOrbitTween = tweenCameraToOrbitPose(
+      this.camera,
+      this.controls,
+      this.observerPosition,
+      startPose,
+      endPose,
+      () => {
+        this.cameraMotionUntil = performance.now() + 250;
+        this.clampCameraDistance();
+        this.syncClipPlanes();
+        this.layoutArrows();
+      },
+    );
   }
 }

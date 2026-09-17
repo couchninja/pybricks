@@ -16,7 +16,6 @@ from simulate.astronomy.constants import (
     EARTH_RADIUS_AU,
     OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
     OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
-    OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS,
     ROOT_FRAME,
     SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
     SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
@@ -49,6 +48,7 @@ _BODY_NODES: tuple[tuple[str, str], ...] = (
 
 _PATH_NODES: tuple[str, ...] = (
     "earth_orbit",
+    "moon_orbit",
     "year_boundaries",
     "galactic_orbit",
     "earth_axis",
@@ -132,6 +132,7 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
     z_near, z_far = camera_clip_planes(scene, camera_distance=default_camera_distance)
     return {
         "time_iso": time_iso,
+        "pointing_target": pointing_target.value,
         "pointing_target_label": pointing_target.label,
         "scene_scale": float(scene.scale),
         "camera_distance_au": default_camera_distance,
@@ -142,7 +143,6 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         "skybox_fade_span_orbit_radius_multiple": SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
         "arrow_mesh_length_au": OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU,
         "arrow_length_camera_distance_fraction": OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
-        "arrow_min_length_au": OBSERVER_VELOCITY_ARROW_MIN_TOTAL_LENGTH_EARTH_DIAMETERS * 2 * EARTH_RADIUS_AU,
         "z_near": z_near,
         "z_far": z_far,
         "inertial_to_root_rotation": _rotation_to_three(
@@ -158,7 +158,8 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
 def _serialize_body(scene: trimesh.Scene, node_name: str, label: str) -> dict[str, Any]:
     transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
     mesh = scene.geometry[geometry_name]
-    radius = float(mesh.bounding_sphere.primitive.radius)
+    # bounding_sphere integrates volume; tiny AU-scale markers can divide by zero.
+    radius = float(np.max(mesh.extents) / 2.0)
     color = _mesh_color(mesh)
     return {
         "name": node_name,

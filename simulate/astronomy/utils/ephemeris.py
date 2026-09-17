@@ -21,6 +21,7 @@ from simulate.astronomy.constants import (
     CMB_DIPOLE_SPEED,
     EARTH_RADIUS_AU,
     KPC_TO_AU,
+    MOON_SIDEREAL_ORBIT_PERIOD,
     OBSERVER_LAT,
     OBSERVER_LON,
     SIDEREAL_DAY,
@@ -67,6 +68,27 @@ def earth_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
             cartesian.z.to_value(u.au),
         ]
     )
+
+
+def moon_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
+    """Geocentric lunar orbit in heliocentric ecliptic coords, anchored at Earth's position at ``time``."""
+    times = time + np.linspace(-0.5, 0.5, samples, endpoint=False) * MOON_SIDEREAL_ORBIT_PERIOD
+    moon = get_body_barycentric("moon", times)
+    earth = get_body_barycentric("earth", times)
+    relative = SkyCoord(
+        moon - earth,
+        representation_type="cartesian",
+        frame="icrs",
+    ).transform_to(BarycentricMeanEcliptic())
+    cartesian = relative.cartesian
+    geocentric = np.column_stack(
+        [
+            cartesian.x.to_value(u.au),
+            cartesian.y.to_value(u.au),
+            cartesian.z.to_value(u.au),
+        ]
+    )
+    return geocentric + earth_heliocentric_ecliptic_au(time)
 
 
 def earth_year_boundary_positions_ecliptic_au(time: Time) -> np.ndarray:

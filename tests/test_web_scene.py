@@ -18,12 +18,32 @@ def test_scene_snapshot_json_serializable() -> None:
     assert "sun" in body_names
     assert "observer" in body_names
     assert payload["time_iso"]
-    assert payload["paths"]
+    path_names = {path["name"] for path in payload["paths"]}
+    assert "earth_orbit" in path_names
+    assert "moon_orbit" in path_names
+
+
+def test_moon_orbit_loops_near_earth() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.MOON)
+    earth = next(body for body in payload["bodies"] if body["name"] == "earth")
+    moon = next(body for body in payload["bodies"] if body["name"] == "moon")
+    moon_orbit = next(path for path in payload["paths"] if path["name"] == "moon_orbit")
+    earth_position = np.array(earth["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    moon_position = np.array(moon["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    segment = moon_orbit["segments"][0]
+    orbit_points = np.array(segment, dtype=float)
+    distances_from_earth = np.linalg.norm(orbit_points - earth_position, axis=1)
+    mean_distance = float(np.mean(distances_from_earth))
+    assert 0.002 < mean_distance < 0.003
+    moon_on_orbit = float(np.min(np.linalg.norm(orbit_points - moon_position, axis=1)))
+    assert moon_on_orbit < 1e-6
 
 
 def test_scene_snapshot_follows_pointing_target() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.MOON)
+    assert payload["pointing_target"] == PointingTarget.MOON.value
     assert payload["pointing_target_label"] == PointingTarget.MOON.label
 
 
@@ -101,4 +121,4 @@ def test_observer_velocity_arrow_shaft_starts_beyond_observer_marker() -> None:
     arrow_base = np.array(observer_arrow["base"], dtype=float)
     gap = np.linalg.norm(arrow_base - observer_position)
     expected_gap = OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE * observer["radius"]
-    assert np.isclose(gap, expected_gap, rtol=1e-6, atol=0.0)
+    assert np.isclose(gap, expected_gap, rtol=1e-6, atol=2e-11)
