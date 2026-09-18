@@ -181,37 +181,22 @@ def test_inertial_to_root_rotation_aligns_galactic_center_with_sagittarius() -> 
     assert np.dot(sky_direction, marker_direction) > 0.999
 
 
-def test_milky_way_diameter_bounds_galactic_orbit() -> None:
+def test_scene_snapshot_omits_viewer_static_metadata() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
-    diameter = payload["milky_way_diameter_au"]
-    assert diameter > payload["default_camera_distance_au"]
-    galactic_center = next(body for body in payload["bodies"] if body["name"] == "galactic_center")
-    gc_position = np.array(galactic_center["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
-    gc_distance = float(np.linalg.norm(gc_position))
-    assert diameter >= 2 * gc_distance * 0.99
+    assert set(payload.keys()) == {
+        "inertial_to_root_rotation",
+        "bodies",
+        "paths",
+        "arrows",
+    }
+    body = next(item for item in payload["bodies"] if item["name"] == "earth")
+    assert "label" not in body
 
 
-def test_scene_snapshot_includes_skybox_fade_metadata() -> None:
+def test_scene_snapshot_includes_observer_velocity_arrow_geometry() -> None:
     reset_web_scene_cache()
-    from simulate.astronomy.constants import (
-        EARTH_ORBIT_RADIUS_AU,
-        SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
-        SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
-    )
-
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
-    assert payload["earth_orbit_radius_au"] == EARTH_ORBIT_RADIUS_AU
-    assert payload["skybox_fade_camera_distance_orbit_multiple"] == SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE
-    assert payload["skybox_fade_span_orbit_radius_multiple"] == SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE
-
-
-def test_scene_snapshot_includes_arrow_mesh_length() -> None:
-    reset_web_scene_cache()
-    from simulate.astronomy.constants import EARTH_RADIUS_AU, OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII
-
-    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
-    assert payload["arrow_mesh_length_au"] == OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU
     observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
     assert observer_arrow["distance_anchor"] == "observer"
     assert len(observer_arrow["base"]) == 3

@@ -10,13 +10,8 @@ from trimesh.visual.color import ColorVisuals
 
 from simulate.astronomy.constants import (
     CAMERA_DISTANCE_EARTH_RADII,
-    EARTH_ORBIT_RADIUS_AU,
     EARTH_RADIUS_AU,
-    OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
-    OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
     ROOT_FRAME,
-    SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
-    SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
     PointingTarget,
 )
 from simulate.astronomy.earth_sun_scene import (
@@ -30,16 +25,15 @@ from simulate.astronomy.simulation_clock import (
     simulation_time,
     time_scaling,
 )
-from simulate.astronomy.utils.camera import camera_clip_planes
 from simulate.astronomy.utils.ephemeris import ecliptic_to_galactocentric_rotation
 
-_BODY_NODES: tuple[tuple[str, str], ...] = (
-    ("sun", "Sun"),
-    ("earth", "Earth"),
-    ("moon", "Moon"),
-    ("iss", "ISS"),
-    ("observer", "Observer"),
-    ("galactic_center", "Milky Way center"),
+_BODY_NODES: tuple[str, ...] = (
+    "sun",
+    "earth",
+    "moon",
+    "iss",
+    "observer",
+    "galactic_center",
 )
 
 _PATH_NODES: tuple[str, ...] = (
@@ -116,24 +110,11 @@ def _advance_animation(scene: trimesh.Scene) -> None:
 def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> dict[str, Any]:
     animation = scene.metadata["earth_sun_animation"]
     current = animation["current_time"]
-    default_camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
-    z_near, z_far = camera_clip_planes(scene, camera_distance=default_camera_distance)
     return {
-        "scene_scale": float(scene.scale),
-        "default_camera_distance_au": default_camera_distance,
-        "earth_radius_au": EARTH_RADIUS_AU,
-        "earth_orbit_radius_au": EARTH_ORBIT_RADIUS_AU,
-        "skybox_fade_camera_distance_orbit_multiple": SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
-        "skybox_fade_span_orbit_radius_multiple": SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
-        "arrow_mesh_length_au": OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII * EARTH_RADIUS_AU,
-        "arrow_length_camera_distance_fraction": OBSERVER_VELOCITY_ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
-        "z_near": z_near,
-        "z_far": z_far,
         "inertial_to_root_rotation": _rotation_to_three(
             ecliptic_to_galactocentric_rotation(current),
         ),
-        "milky_way_diameter_au": _milky_way_diameter_au(scene),
-        "bodies": [_serialize_body(scene, node, label) for node, label in _BODY_NODES],
+        "bodies": [_serialize_body(scene, node) for node in _BODY_NODES],
         "paths": [
             _serialize_path(scene, node)
             for node in _PATH_NODES
@@ -147,7 +128,7 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
     }
 
 
-def _serialize_body(scene: trimesh.Scene, node_name: str, label: str) -> dict[str, Any]:
+def _serialize_body(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
     transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
     mesh = scene.geometry[geometry_name]
     # bounding_sphere integrates volume; tiny AU-scale markers can divide by zero.
@@ -155,7 +136,6 @@ def _serialize_body(scene: trimesh.Scene, node_name: str, label: str) -> dict[st
     color = _mesh_color(mesh)
     return {
         "name": node_name,
-        "label": label,
         "radius": radius,
         "color": color,
         "matrix": _matrix_to_three(transform),
@@ -238,14 +218,3 @@ def _matrix_to_three(matrix: np.ndarray) -> list[float]:
 
 def _rotation_to_three(rotation: np.ndarray) -> list[float]:
     return rotation.T.reshape(-1).astype(float).tolist()
-
-
-def _milky_way_diameter_au(scene: trimesh.Scene) -> float:
-    cached = scene.metadata.get("milky_way_diameter_au")
-    if isinstance(cached, (int, float)):
-        return float(cached)
-    from simulate.astronomy.earth_sun_scene import _milky_way_diameter_au as compute_diameter
-
-    diameter = compute_diameter(scene)
-    scene.metadata["milky_way_diameter_au"] = diameter
-    return diameter
