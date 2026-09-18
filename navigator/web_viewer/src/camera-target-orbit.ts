@@ -9,6 +9,12 @@ const MIN_OFFSET_DISTANCE_AU = 1e-14;
 
 const cameraTweenGroup = new Group();
 const slerpDirectionScratch = new THREE.Vector3();
+const orbitControlsWorldUp = new THREE.Vector3(0, 1, 0);
+
+type OrbitControlsWithUpBasis = OrbitControls & {
+  _quat: THREE.Quaternion;
+  _quatInverse: THREE.Quaternion;
+};
 
 export type CameraOrbitTweenHandle = {
   stop: () => void;
@@ -77,15 +83,21 @@ export function tweenCameraToOrbitPose(
       controls.target.copy(pivot);
       camera.position.copy(pivot).add(direction.multiplyScalar(distance));
       camera.up.lerpVectors(startUp, endUp, t).normalize();
+      syncOrbitControlsUpBasis(controls);
       controls.update();
       onUpdate();
     })
     .onComplete(() => {
+      controls.target.copy(pivot);
       camera.position.copy(pivot).add(end.offset);
       camera.up.copy(endUp);
+      syncOrbitControlsUpBasis(controls);
+      controls.update();
       controls.enabled = true;
     })
     .onStop(() => {
+      syncOrbitControlsUpBasis(controls);
+      controls.update();
       controls.enabled = true;
     })
     .start();
@@ -99,4 +111,10 @@ export function tweenCameraToOrbitPose(
 
 export function updateCameraTargetTweens(timeMs: number): void {
   cameraTweenGroup.update(timeMs);
+}
+
+function syncOrbitControlsUpBasis(controls: OrbitControls): void {
+  const internals = controls as OrbitControlsWithUpBasis;
+  internals._quat.setFromUnitVectors(controls.object.up, orbitControlsWorldUp);
+  internals._quatInverse.copy(internals._quat).invert();
 }
