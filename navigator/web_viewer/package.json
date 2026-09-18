@@ -6,13 +6,15 @@
     "build": "tsc --noEmit --incremental && vite build",
     "dev": "vite",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
     "prettier": "^3.5.3",
     "typescript": "^5.9.2",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@tweenjs/tween.js": "^25.0.0",

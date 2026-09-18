@@ -9,6 +9,7 @@ env = { PYTHONPATH = "." }
 
 [tasks]
 web-viewer-build = { cmd = "npm run build", cwd = "navigator/web_viewer" }
+web-viewer-test = { cmd = "npm test", cwd = "navigator/web_viewer" }
 web-viewer-format = { cmd = "npm run format", cwd = "navigator/web_viewer" }
 web-viewer-format-check = { cmd = "npm run format:check", cwd = "navigator/web_viewer" }
 web-viewer-install = { cmd = "npm install", cwd = "navigator/web_viewer" }
