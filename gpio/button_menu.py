@@ -122,7 +122,7 @@ class ButtonMenu:
             self._show_selection()
 
     def cycle_pointing_target(self) -> None:
-        """Advance to the next ``PointingTarget`` (same order as the astronomy viewer)."""
+        """Advance to the next ``PointingTarget`` (same order as the web viewer)."""
         targets = list(PointingTarget)
         current = self.selected_button["target"]
         next_target = targets[(targets.index(current) + 1) % len(targets)]

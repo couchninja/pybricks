@@ -45,14 +45,12 @@ OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE = 10
 CAMERA_DISTANCE_EARTH_RADII = 80
 AXIS_HALF_LENGTH_CAMERA_DISTANCE_FRACTION = AXIS_HALF_LENGTH_EARTH_RADII / CAMERA_DISTANCE_EARTH_RADII
 AXIS_MIN_TOTAL_LENGTH_EARTH_DIAMETERS = 2
-# Pan/zoom sensitivity; keep near the solar-system scale, not galactic bounds.
-TRACKBALL_SCALE_AU = 2.0
 GALACTIC_AXIS_HALF_LENGTH_ORBIT_FRACTION = 0.05
 GALACTIC_CENTER_RADIUS_ORBIT_FRACTION = 0.003
 
 # Default Trimesh z_near is 0.01 AU, larger than exaggerated Earth (~0.0009 AU).
 CAMERA_Z_NEAR_EARTH_RADII = 0.01
-# z_far = camera distance + scene.scale * this multiplier (see viewer clip planes).
+# z_far = camera distance + scene.scale * this multiplier (see camera_clip_planes).
 CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER = 2.0
 # gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
 MAX_DEPTH_RATIO = 5e7
@@ -112,26 +110,17 @@ _POINTING_TARGET_LABELS = {
     PointingTarget.MILKY_WAY_CENTER: "Milky Way center",
     PointingTarget.ISS: "ISS",
 }
-POINTING_TARGET_BUTTON_MARGIN = 8
-POINTING_TARGET_BUTTON_WIDTH = 200
-POINTING_TARGET_BUTTON_HEIGHT = 32
 GALACTIC_ORBIT_COLOR = [120, 80, 180, 255]
 GALACTIC_AXIS_COLOR = [180, 120, 255, 255]
 GALACTIC_CENTER_COLOR = [240, 200, 255, 255]
 CMB_DIPOLE_ARROW_COLOR = [255, 200, 80, 255]
-LABEL_OFFSET_BODY_RADII = 2.5
-LABEL_FONT_SIZE = 18
-FPS_LABEL_MARGIN = 8
-LINE_WIDTH_PIXELS = 1
-
 MILKY_WAY_FRAME = "milky_way"
 SOLAR_SYSTEM_FRAME = "solar_system"
 EARTH_CENTER_FRAME = "earth_center"
-# Trimesh scene base/world frame: fixed display origin for the camera and trackball.
+# Trimesh scene base/world frame: fixed display origin for the web viewer camera.
 # No astronomy coordinates live here; earth_center is its only child and recenters
 # the subtree so Earth stays at EARTH_CENTER_ORIGIN.
 ROOT_FRAME = "root_frame"
 EARTH_CENTER_ORIGIN = np.zeros(3)
 
-ANIMATION_CALLBACK_PERIOD = 1.0 / 60.0
 ORBIT_UPDATE_INTERVAL = 10 * u.day

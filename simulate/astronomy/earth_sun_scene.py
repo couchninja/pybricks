@@ -16,8 +16,8 @@ The graph stacks two independent concerns:
    carries the ecliptic-to-galactic rotation and the Sun's galactocentric position.
 
 2. Display recentering. ``earth_center`` translates the entire subtree by
-   ``-earth_root`` each frame so Earth stays at ``EARTH_CENTER_ORIGIN``. The camera
-   and trackball orbit that fixed origin. ``earth_center`` parents ``milky_way`` not
+   ``-earth_root`` each frame so Earth stays at ``EARTH_CENTER_ORIGIN``. The web
+   viewer camera orbits that fixed origin. ``earth_center`` parents ``milky_way`` not
    because Earth contains the galaxy, but because every body — solar-system and
    galactic — must shift together when recentering. If galactic geometry sat outside
    ``earth_center``, it would stay fixed in root-frame space while only the solar
@@ -28,12 +28,10 @@ GALACTIC_ORBIT_DISTANCE_SCALE after kpc->AU conversion (1 = true scale; solar-sy
 geometry stays true AU). Only lengths are scaled, not the ecliptic-to-galactic rotation.
 """
 
-from time import perf_counter
 from typing import TypedDict
 
 import numpy as np
 import trimesh
-from astropy import units as u
 from astropy.time import Time
 from trimesh.visual.color import ColorVisuals
 
@@ -80,7 +78,7 @@ from simulate.astronomy.constants import (
     YEAR_BOUNDARY_COLOR,
     PointingTarget,
 )
-from simulate.astronomy.utils.camera import camera_distance_au, camera_distance_to_point_au
+from simulate.astronomy.utils.camera import camera_distance_to_point_au
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
     current_time,
@@ -97,22 +95,16 @@ from simulate.astronomy.utils.ephemeris import (
     moon_orbit_ecliptic_au,
     observer_direction_ecliptic,
     observer_direction_ecliptic_for_target,
-    observer_surface_vector_and_euler_angles_for_target,
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
 from simulate.astronomy.utils.iss import refresh_iss_tle
-from simulate.astronomy.utils.iss_tle import ISS_TLE_REFRESH_INTERVAL_S
-
-last_orientation_print = -1
 
 
 class EarthSunAnimationState(TypedDict):
-    start_time: Time
     last_orbit_time: Time | None
     last_iss_tle_refresh: float | None
     time_scaling: float
-    wall_start: float | None
     current_time: Time | None
 
 
@@ -343,43 +335,6 @@ def update_earth_sun_scene(
         return time
 
     return last_orbit_time
-
-
-def earth_sun_animation_callback(scene: trimesh.Scene) -> None:
-    animation = scene.metadata["earth_sun_animation"]
-    if animation["wall_start"] is None:
-        animation["wall_start"] = perf_counter()
-    now = perf_counter()
-    last_iss_tle_refresh = animation["last_iss_tle_refresh"]
-    if last_iss_tle_refresh is None or now - last_iss_tle_refresh >= ISS_TLE_REFRESH_INTERVAL_S:
-        refresh_iss_tle()
-        animation["last_iss_tle_refresh"] = now
-    elapsed = now - animation["wall_start"]
-    time = animation["start_time"] + elapsed * animation["time_scaling"] * u.second
-    animation["current_time"] = time
-    animation["last_orbit_time"] = update_earth_sun_scene(
-        scene,
-        time,
-        animation["last_orbit_time"],
-        camera_distance_au(scene),
-    )
-    global last_orientation_print
-    if now - last_orientation_print >= 10.0:
-        last_orientation_print = now
-        _print_active_orientation_vector(scene, time)
-
-
-def _print_active_orientation_vector(scene: trimesh.Scene, time: Time) -> None:
-    pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
-    surface, (yaw, pitch, roll), speed = observer_surface_vector_and_euler_angles_for_target(time, pointing_target)
-    speed_km_s = speed * (1 * u.au).to_value(u.km)
-    speed_km_h = speed_km_s * 3600.0
-    print(  # noqa: T201
-        f"{pointing_target}: "
-        f"surface [{surface[0]:.6f}, {surface[1]:.6f}, {surface[2]:.6f}]  "
-        f"euler [{yaw:.2f}, {pitch:.2f}, {roll:.2f}] deg  "
-        f"speed {speed:.2f} AU/s, {speed_km_s:.4f} km/s, {speed_km_h:.2f} km/h"
-    )
 
 
 def _galactic_center_position(state: EarthSunState) -> np.ndarray:

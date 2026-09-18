@@ -29,7 +29,6 @@ export type SceneSnapshot = {
   pointing_target: string;
   pointing_target_label: string;
   scene_scale: number;
-  camera_distance_au: number;
   default_camera_distance_au: number;
   earth_radius_au: number;
   earth_orbit_radius_au: number;

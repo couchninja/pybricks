@@ -63,17 +63,12 @@ _ARROW_NODES: tuple[str, ...] = (
 )
 
 
-class _WebSceneCache:
-    scene: trimesh.Scene | None = None
-    animation: EarthSunAnimationState | None = None
-
-
-_cache = _WebSceneCache()
+_cache_scene: trimesh.Scene | None = None
 
 
 def reset_web_scene_cache() -> None:
-    _cache.scene = None
-    _cache.animation = None
+    global _cache_scene
+    _cache_scene = None
     reset_simulation_clock()
 
 
@@ -85,30 +80,26 @@ def scene_snapshot_payload(pointing_target: PointingTarget) -> dict[str, Any]:
 
 
 def _ensure_scene() -> trimesh.Scene:
-    if _cache.scene is None:
+    global _cache_scene
+    if _cache_scene is None:
         start = simulation_time()
         scene = build_earth_sun_scene(start)
         reanchor_wall_clock()
         start = simulation_time()
         scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
-            start_time=start,
             last_orbit_time=None,
             last_iss_tle_refresh=perf_counter(),
             time_scaling=time_scaling(),
-            wall_start=None,
             current_time=start,
         )
-        _cache.scene = scene
-        _cache.animation = scene.metadata["earth_sun_animation"]
+        _cache_scene = scene
         return scene
 
-    return _cache.scene
+    return _cache_scene
 
 
 def _advance_animation(scene: trimesh.Scene) -> None:
     animation = scene.metadata["earth_sun_animation"]
-    if animation["wall_start"] is None:
-        animation["wall_start"] = perf_counter()
     now = perf_counter()
     last_iss_tle_refresh = animation["last_iss_tle_refresh"]
     if last_iss_tle_refresh is None or now - last_iss_tle_refresh >= ISS_TLE_REFRESH_INTERVAL_S:
@@ -137,7 +128,6 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         "pointing_target": pointing_target.value,
         "pointing_target_label": pointing_target.label,
         "scene_scale": float(scene.scale),
-        "camera_distance_au": default_camera_distance,
         "default_camera_distance_au": default_camera_distance,
         "earth_radius_au": EARTH_RADIUS_AU,
         "earth_orbit_radius_au": EARTH_ORBIT_RADIUS_AU,
@@ -216,10 +206,10 @@ def _serialize_arrow(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
 def _mesh_color(mesh: trimesh.Trimesh) -> list[int]:
     visual = mesh.visual
     if not isinstance(visual, ColorVisuals):
-        return [200, 200, 200]
+        raise TypeError("mesh must use ColorVisuals")
     colors = visual.face_colors
     if len(colors) == 0:
-        return [200, 200, 200]
+        raise ValueError("mesh has no face colors")
     channel = colors[0]
     return [int(channel[0]), int(channel[1]), int(channel[2])]
 
