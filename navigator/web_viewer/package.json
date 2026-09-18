@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit --incremental && vite build",
     "dev": "vite",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
