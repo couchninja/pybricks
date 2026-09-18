@@ -35,6 +35,8 @@ const LABEL_OFFSET_BODY_RADII = 2.5;
 const _labelWorldCenter = new THREE.Vector3();
 const _labelWorldAnchor = new THREE.Vector3();
 const _cameraScreenDown = new THREE.Vector3();
+const _galacticCenterWorld = new THREE.Vector3();
+const _orbitPivot = new THREE.Vector3();
 const SELF_LIT_BODY_EMISSIVE_INTENSITY: Partial<Record<string, number>> = {
   sun: 0.65,
   observer: 0.45,
@@ -72,24 +74,41 @@ function createSphereMesh(radius: number, color: Rgb, emissiveIntensity = 0): TH
   return new THREE.Mesh(geometry, material);
 }
 
-const ARROW_HEAD_LENGTH_FRACTION = 0.18;
-const ARROW_HEAD_RADIUS_EARTH_RADII = 0.30;
-const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.1;
-const ARROW_EMISSIVE_INTENSITY = 0.45;
+const ARROW_HEAD_LENGTH_FRACTION = 0.1;
+const ARROW_HEAD_RADIUS_EARTH_RADII = 0.15;
+const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.07;
 const ARROW_OCCLUDED_OPACITY = 0.45;
 /** Temporary: set true to draw the faded behind-geometry arrow pass. */
 const ARROW_OCCLUDED_PASS_ENABLED = true;
 const ARROW_OCCLUDED_RENDER_ORDER = 1;
 const ARROW_VISIBLE_RENDER_ORDER = 2;
+/** Separate duplicate arrow passes in depth to avoid WebGPU z-fighting at large clip distances. */
+const ARROW_VISIBLE_POLYGON_OFFSET = { factor: -2, units: -2 };
+const ARROW_OCCLUDED_POLYGON_OFFSET = { factor: 2, units: 2 };
 /** Web view: longer than desktop so the arrow stays readable when zoomed out. */
 const ARROW_LENGTH_BOOST = 2.5;
+/** Matches `OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE` in simulate/astronomy/constants.py */
+const ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE = 50;
 type ArrowFrame = {
   base: THREE.Vector3;
   direction: THREE.Vector3;
   color: Rgb;
   distanceAnchor: ArrowDistanceAnchor;
   displayLengthAu: number;
+  displayGapAu: number;
 };
+
+function observerArrowShaftStartAu(
+  observerRadiusAu: number,
+  cameraDistanceAu: number,
+  defaultCameraDistanceAu: number,
+): number {
+  if (defaultCameraDistanceAu <= 0) {
+    return 0;
+  }
+  const defaultGapAu = ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE * observerRadiusAu;
+  return defaultGapAu * (cameraDistanceAu / defaultCameraDistanceAu);
+}
 
 function addArrowPart(
   group: THREE.Group,
@@ -124,9 +143,11 @@ function createSceneArrow(
   shaftRadius: number,
 ): THREE.Group {
   const group = new THREE.Group();
-  const visibleColor = color.clone().multiplyScalar(1 + ARROW_EMISSIVE_INTENSITY);
-  const visibleMaterial = new THREE.MeshLambertMaterial({
-    color: visibleColor,
+  const visibleMaterial = new THREE.MeshBasicMaterial({
+    color,
+    polygonOffset: true,
+    polygonOffsetFactor: ARROW_VISIBLE_POLYGON_OFFSET.factor,
+    polygonOffsetUnits: ARROW_VISIBLE_POLYGON_OFFSET.units,
   });
   const occludedMaterial = new THREE.MeshBasicMaterial({
     color,
@@ -135,6 +156,9 @@ function createSceneArrow(
     depthTest: true,
     depthFunc: THREE.GreaterDepth,
     depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: ARROW_OCCLUDED_POLYGON_OFFSET.factor,
+    polygonOffsetUnits: ARROW_OCCLUDED_POLYGON_OFFSET.units,
   });
   const shaftLength = length - headLength;
   const shaftGeometry = new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 12);
@@ -143,6 +167,7 @@ function createSceneArrow(
   addArrowPart(group, headGeometry, shaftLength + headLength / 2, visibleMaterial, occludedMaterial);
   group.position.copy(origin);
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  group.frustumCulled = false;
   return group;
 }
 
@@ -168,10 +193,14 @@ function cameraDistanceForArrow(
   camera: THREE.PerspectiveCamera,
   target: THREE.Vector3,
   anchor: ArrowDistanceAnchor,
-  galacticCenter: THREE.Vector3,
+  galacticCenterRoot: THREE.Object3D | null,
 ): number {
   if (anchor === "galactic_center") {
-    return camera.position.distanceTo(galacticCenter);
+    if (!galacticCenterRoot) {
+      return camera.position.distanceTo(target);
+    }
+    galacticCenterRoot.getWorldPosition(_galacticCenterWorld);
+    return camera.position.distanceTo(_galacticCenterWorld);
   }
   return camera.position.distanceTo(target);
 }
@@ -206,13 +235,14 @@ export class EarthSunViewer {
   private renderReady = false;
   private readonly labelRenderer: CSS2DRenderer;
   private readonly scene: THREE.Scene;
+  /** Scene graph rebased each frame so the observer sits at the origin (GPU float32 precision). */
+  private readonly contentRoot: THREE.Group;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly bodies = new Map<string, BodyEntry>();
   private readonly paths = new Map<string, PathEntry>();
   private readonly arrows = new Map<string, THREE.Group>();
   private readonly arrowFrames = new Map<string, ArrowFrame>();
-  private readonly galacticCenter = new THREE.Vector3();
   private readonly sunPointLight: THREE.PointLight;
   private readonly observerPosition = new THREE.Vector3();
   private readonly defaultCameraOffset = new THREE.Vector3(0, 0, 1);
@@ -262,7 +292,9 @@ export class EarthSunViewer {
     this.canvasHost.appendChild(this.fpsEl);
 
     this.scene = new THREE.Scene();
-    this.scene.add(this.constellationSky.root);
+    this.contentRoot = new THREE.Group();
+    this.contentRoot.name = "content_root";
+    this.scene.add(this.constellationSky.root, this.contentRoot);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.001, 1000);
     this.camera.position.set(0, 0, 1);
@@ -292,7 +324,7 @@ export class EarthSunViewer {
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.12);
     this.sunPointLight = new THREE.PointLight(0xfff2cc, 2.5, 0, 2);
-    this.scene.add(ambient, this.sunPointLight);
+    this.contentRoot.add(ambient, this.sunPointLight);
 
     this.resizeObserver = new ResizeObserver(() => {
       this.onResize();
@@ -355,6 +387,7 @@ export class EarthSunViewer {
     for (const arrow of snapshot.arrows) {
       this.updateArrow(arrow);
     }
+    this.removeArrowsExcept(snapshot.arrows.map((arrow) => arrow.name));
     this.layoutArrows();
     this.syncClipPlanes();
     this.updateLabels();
@@ -388,7 +421,7 @@ export class EarthSunViewer {
       if (label) {
         root.add(label);
       }
-      this.scene.add(root);
+      this.contentRoot.add(root);
       entry = { root, label, radius: 0 };
       this.bodies.set(body.name, entry);
     }
@@ -418,9 +451,6 @@ export class EarthSunViewer {
     if (entry.label) {
       entry.label.position.set(0, 0, body.radius * LABEL_OFFSET_BODY_RADII);
     }
-    if (body.name === "galactic_center") {
-      this.galacticCenter.setFromMatrixPosition(entry.root.matrix);
-    }
     if (body.name === "sun") {
       this.sunPointLight.position.setFromMatrixPosition(entry.root.matrix);
     }
@@ -434,7 +464,7 @@ export class EarthSunViewer {
     }
 
     if (existing) {
-      this.scene.remove(existing.root);
+      this.contentRoot.remove(existing.root);
       existing.root.traverse((object) => {
         if (object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -450,6 +480,9 @@ export class EarthSunViewer {
         continue;
       }
       const points = segment.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+      if (path.name.endsWith("_orbit") && points.length >= 3) {
+        points.push(points[0].clone());
+      }
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
       const material = new THREE.LineBasicMaterial({
         color: rgbToThree(path.color),
@@ -458,7 +491,7 @@ export class EarthSunViewer {
       });
       root.add(new THREE.Line(geometry, material));
     }
-    this.scene.add(root);
+    this.contentRoot.add(root);
     this.paths.set(path.name, { root, signature });
   }
 
@@ -469,11 +502,51 @@ export class EarthSunViewer {
       color: arrow.color,
       distanceAnchor: arrow.distance_anchor,
       displayLengthAu: -1,
+      displayGapAu: -1,
     });
+  }
+
+  private removeArrowsExcept(names: string[]): void {
+    const keep = new Set(names);
+    for (const name of this.arrowFrames.keys()) {
+      if (keep.has(name)) {
+        continue;
+      }
+      this.arrowFrames.delete(name);
+      const existing = this.arrows.get(name);
+      if (!existing) {
+        continue;
+      }
+      this.contentRoot.remove(existing);
+      disposeSceneArrow(existing);
+      this.arrows.delete(name);
+    }
   }
 
   private arrowDisplayLengthAu(cameraDistanceAu: number): number {
     return cameraDistanceAu * this.arrowLengthCameraFraction * ARROW_LENGTH_BOOST;
+  }
+
+  private arrowShaftStartAu(frame: ArrowFrame, cameraDistanceAu: number): number {
+    if (frame.distanceAnchor !== "observer") {
+      return 0;
+    }
+    const observer = this.bodies.get("observer");
+    if (!observer || observer.radius <= 0) {
+      return 0;
+    }
+    return observerArrowShaftStartAu(
+      observer.radius,
+      cameraDistanceAu,
+      this.defaultCameraDistance,
+    );
+  }
+
+  private arrowWorldOrigin(frame: ArrowFrame, shaftStartAu: number): THREE.Vector3 {
+    if (frame.distanceAnchor === "observer") {
+      return this.observerPosition.clone().addScaledVector(frame.direction, shaftStartAu);
+    }
+    return frame.base.clone();
   }
 
   private layoutArrows(): void {
@@ -485,39 +558,49 @@ export class EarthSunViewer {
         this.camera,
         this.controls.target,
         frame.distanceAnchor,
-        this.galacticCenter,
+        this.bodies.get("galactic_center")?.root ?? null,
       );
+      const shaftStartAu = this.arrowShaftStartAu(frame, cameraDistance);
+      const origin = this.arrowWorldOrigin(frame, shaftStartAu);
       const displayLength = this.arrowDisplayLengthAu(cameraDistance);
       const lengthDelta = Math.abs(displayLength - frame.displayLengthAu);
-      const rebuild =
+      const gapDelta = Math.abs(shaftStartAu - frame.displayGapAu);
+      const rebuildLength =
         lengthDelta > frame.displayLengthAu * 0.02 ||
         lengthDelta > this.arrowMeshLengthAu * 0.02;
-      if (!rebuild && this.arrows.has(name)) {
+      const repositionGap =
+        gapDelta > Math.max(frame.displayGapAu * 0.02, this.arrowEarthRadiusAu * 1e-4);
+      const existing = this.arrows.get(name);
+      if (!rebuildLength && !repositionGap && existing) {
         continue;
       }
       frame.displayLengthAu = displayLength;
+      frame.displayGapAu = shaftStartAu;
 
-      const existing = this.arrows.get(name);
-      if (existing) {
-        this.scene.remove(existing);
-        disposeSceneArrow(existing);
+      if (rebuildLength || !existing) {
+        if (existing) {
+          this.contentRoot.remove(existing);
+          disposeSceneArrow(existing);
+        }
+
+        const sizeScale = displayLength / this.arrowMeshLengthAu;
+        const headLength = displayLength * ARROW_HEAD_LENGTH_FRACTION;
+        const headRadius = ARROW_HEAD_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+        const shaftRadius = ARROW_SHAFT_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+        const arrow = createSceneArrow(
+          frame.direction,
+          origin,
+          displayLength,
+          rgbToThree(frame.color),
+          headLength,
+          headRadius,
+          shaftRadius,
+        );
+        this.contentRoot.add(arrow);
+        this.arrows.set(name, arrow);
+      } else if (existing) {
+        existing.position.copy(origin);
       }
-
-      const sizeScale = displayLength / this.arrowMeshLengthAu;
-      const headLength = displayLength * ARROW_HEAD_LENGTH_FRACTION;
-      const headRadius = ARROW_HEAD_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
-      const shaftRadius = ARROW_SHAFT_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
-      const arrow = createSceneArrow(
-        frame.direction,
-        frame.base,
-        displayLength,
-        rgbToThree(frame.color),
-        headLength,
-        headRadius,
-        shaftRadius,
-      );
-      this.scene.add(arrow);
-      this.arrows.set(name, arrow);
     }
     this.syncOutlineSelection();
   }
@@ -532,13 +615,13 @@ export class EarthSunViewer {
     if (!entry) {
       return;
     }
-    const next = new THREE.Vector3().setFromMatrixPosition(entry.root.matrix);
-    if (this.hasInitialCamera) {
-      const delta = next.clone().sub(this.observerPosition);
-      this.controls.target.add(delta);
-      this.camera.position.add(delta);
-    }
-    this.observerPosition.copy(next);
+    this.observerPosition.setFromMatrixPosition(entry.root.matrix);
+    this.syncFloatingOrigin();
+  }
+
+  private syncFloatingOrigin(): void {
+    this.contentRoot.position.copy(this.observerPosition).negate();
+    this.contentRoot.updateMatrixWorld(true);
   }
 
   private clampCameraDistance(): void {
@@ -676,6 +759,7 @@ export class EarthSunViewer {
     if (!this.renderReady || this.outlinePipeline === null) {
       return;
     }
+    this.syncFloatingOrigin();
     this.layoutArrows();
     this.syncClipPlanes();
     this.outlinePipeline.prepareFrame();
@@ -698,8 +782,8 @@ export class EarthSunViewer {
   resetCamera(): void {
     const distance = this.defaultCameraDistance || 1;
     this.defaultCameraOffset.set(0, 0, distance);
-    this.controls.target.copy(this.observerPosition);
-    this.camera.position.copy(this.observerPosition).add(this.defaultCameraOffset);
+    this.controls.target.set(0, 0, 0);
+    this.camera.position.copy(this.defaultCameraOffset);
     this.controls.update();
   }
 
@@ -715,12 +799,12 @@ export class EarthSunViewer {
     this.cameraOrbitTween?.stop();
     this.cameraOrbitTween = null;
 
-    const currentOffset = this.camera.position.clone().sub(this.observerPosition);
+    const currentOffset = this.camera.position.clone();
     const currentOffsetDirection =
       currentOffset.lengthSq() > 1e-20
         ? currentOffset.clone().normalize()
         : this.defaultCameraOffset.clone().normalize();
-    const startPose = cameraPoseFromState(this.camera, this.observerPosition);
+    const startPose = cameraPoseFromState(this.camera, _orbitPivot);
     const endPose = desiredOrbitTargetCameraPose(
       this.camera,
       snapshot,
@@ -733,7 +817,7 @@ export class EarthSunViewer {
     this.cameraOrbitTween = tweenCameraToOrbitPose(
       this.camera,
       this.controls,
-      this.observerPosition,
+      _orbitPivot,
       startPose,
       endPose,
       () => {
