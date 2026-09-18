@@ -40,6 +40,9 @@ def test_index_html_includes_target_buttons() -> None:
     assert "Next target" not in html
     assert 'id="server-status"' in html
     assert "Server connected" in html
+    assert "target-buttons-col" in html
+    assert 'timeScale.preset === "realtime"' not in html
+    assert "rgba(40, 80, 55" not in html
 
 
 def test_status_payload_includes_target_and_logs(menu_without_gpio: HostButtonMenu) -> None:

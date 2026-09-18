@@ -71,6 +71,21 @@ _BODY_TARGETS = frozenset(
     }
 )
 
+_TARGET_BUTTON_COLUMNS: tuple[tuple[PointingTarget, ...], ...] = (
+    (
+        PointingTarget.SUN,
+        PointingTarget.MOON,
+        PointingTarget.MILKY_WAY_CENTER,
+        PointingTarget.ISS,
+    ),
+    (
+        PointingTarget.EARTH_ROTATION,
+        PointingTarget.SUN_ORBIT,
+        PointingTarget.MILKY_WAY_ORBIT,
+        PointingTarget.CMB_DIPOLE,
+    ),
+)
+
 _INDEX_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -195,12 +210,18 @@ _INDEX_HTML = """<!DOCTYPE html>
       margin-bottom: 0.5rem;
     }
     .target-buttons {
-      display: grid;
-      grid-template-columns: repeat(2, max-content);
+      display: flex;
       gap: 0.5rem;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1rem;
       width: max-content;
       max-width: 100%;
+    }
+    .target-buttons-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1 1 0;
+      min-width: 0;
     }
     button.target-btn {
       padding: 0.75rem 0.65rem;
@@ -212,6 +233,8 @@ _INDEX_HTML = """<!DOCTYPE html>
       color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
+      width: 100%;
+      text-align: center;
     }
     button.target-btn.active {
       border-color: var(--accent);
@@ -228,31 +251,38 @@ _INDEX_HTML = """<!DOCTYPE html>
     }
     .time-scale-buttons {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      flex-direction: column;
+      gap: 0;
       width: max-content;
       max-width: 100%;
     }
     button.time-scale {
-      flex: 0 0 auto;
       padding: 0.75rem 0.5rem;
       font-size: 0.8125rem;
       font-weight: 600;
       border: 1px solid rgba(61, 156, 240, 0.45);
-      border-radius: 10px;
+      border-radius: 0;
       background: var(--card);
       color: var(--text);
       cursor: pointer;
       touch-action: manipulation;
       white-space: nowrap;
     }
+    button.time-scale + button.time-scale {
+      margin-top: -1px;
+    }
+    .time-scale-buttons button.time-scale:first-child {
+      border-radius: 10px 10px 0 0;
+    }
+    .time-scale-buttons button.time-scale:last-child {
+      border-radius: 0 0 10px 10px;
+    }
     button.time-scale.active {
       border-color: var(--accent);
       background: rgba(61, 156, 240, 0.22);
     }
-    button.time-scale-now {
-      border-color: rgba(120, 220, 160, 0.55);
-      background: rgba(40, 80, 55, 0.45);
+    button.time-scale.time-scale-now {
+      border-color: rgba(120, 220, 160, 0.45);
     }
     button.time-scale:active { opacity: 0.85; }
     details.logs-panel {
@@ -330,6 +360,12 @@ _INDEX_HTML = """<!DOCTYPE html>
     <span class="server-status-dot" aria-hidden="true"></span>
     <span id="server-status-text">Connecting…</span>
   </div>
+  <div class="target-buttons-label">Pointing target</div>
+  <div class="target-buttons" id="target-buttons">
+__TARGET_BUTTONS__
+  </div>
+  <div class="target" id="target">—</div>
+  <div class="speed" id="speed"></div>
   <div class="time-scale">
     <div class="time-scale-label">Simulation time</div>
     <div class="time-scale-buttons">
@@ -341,8 +377,6 @@ _INDEX_HTML = """<!DOCTYPE html>
       <button type="button" class="time-scale time-scale-now" data-preset="now">Now (realtime)</button>
     </div>
   </div>
-  <div class="target" id="target">—</div>
-  <div class="speed" id="speed"></div>
   <div class="viewer-options">
     <div class="viewer-options-label">Viewer</div>
     <label class="viewer-option">
@@ -353,10 +387,6 @@ _INDEX_HTML = """<!DOCTYPE html>
       <input type="checkbox" id="parametric-orbit-lines-control" checked />
       Keplerian / TLE orbit lines
     </label>
-  </div>
-  <div class="target-buttons-label">Pointing target</div>
-  <div class="target-buttons" id="target-buttons">
-__TARGET_BUTTONS__
   </div>
   <details class="logs-panel">
     <summary class="logs-label">Log</summary>
@@ -388,11 +418,11 @@ __TARGET_BUTTONS__
     function applyTimeScaleUi(timeScale) {
       for (const btn of timeScaleButtons) {
         const preset = btn.dataset.preset;
-        const active =
-          preset === "now"
-            ? timeScale.preset === "realtime"
-            : preset === timeScale.preset;
-        btn.classList.toggle("active", active);
+        if (preset === "now") {
+          btn.classList.remove("active");
+          continue;
+        }
+        btn.classList.toggle("active", preset === timeScale.preset);
       }
     }
 
@@ -567,12 +597,17 @@ def navigator_session_id() -> str:
     return _navigator_session_id
 
 
+def _target_button_html(target: PointingTarget) -> str:
+    return f'      <button type="button" class="target-btn" data-target="{target.value}">{target.label}</button>'
+
+
 def _target_buttons_html() -> str:
     lines: list[str] = []
-    for target in PointingTarget:
-        lines.append(
-            f'    <button type="button" class="target-btn" data-target="{target.value}">{target.label}</button>'
-        )
+    for column in _TARGET_BUTTON_COLUMNS:
+        lines.append('    <div class="target-buttons-col">')
+        for target in column:
+            lines.append(_target_button_html(target))
+        lines.append("    </div>")
     return "\n".join(lines)
 
 
