@@ -516,6 +516,13 @@ def _gcrs_displacement_to_ecliptic_au(displacement_m: np.ndarray, time: Time) ->
     return direction_ecliptic * (length_m / u.au.to(u.m))
 
 
+def gcrs_to_mean_ecliptic_rotation(time: Time) -> np.ndarray:
+    """Rotation mapping GCRS Cartesian vectors into mean ecliptic Cartesian (AU-scale vectors)."""
+    return np.column_stack(
+        [_gcrs_unit_vector_to_ecliptic(axis, time) for axis in np.eye(3, dtype=float)],
+    )
+
+
 def _gcrs_unit_vector_to_ecliptic(vector: np.ndarray, time: Time) -> np.ndarray:
     gcrs = GCRS(
         x=vector[0] * u.one,

@@ -2,6 +2,11 @@
 
 export const EARTH_RADIUS_AU = 6371 / 149597870.7;
 export const EARTH_ORBIT_RADIUS_AU = 1;
+/** Matches `EARTH_ORBIT_SEGMENTS` in simulate/astronomy/constants.py */
+export const EARTH_ORBIT_PARAMETRIC_SAMPLES = 360 * 5;
+/** Matches default samples in `sun_galactic_orbit_kpc`. */
+export const GALACTIC_ORBIT_PARAMETRIC_SAMPLES = 360;
+export const DEFAULT_PARAMETRIC_ORBIT_SAMPLES = 128;
 export const CAMERA_DISTANCE_EARTH_RADII = 80;
 export const DEFAULT_CAMERA_DISTANCE_AU = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU;
 export const SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE = 10;

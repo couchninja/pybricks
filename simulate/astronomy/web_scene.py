@@ -19,13 +19,14 @@ from simulate.astronomy.earth_sun_scene import (
     build_earth_sun_scene,
     update_earth_sun_scene,
 )
+from simulate.astronomy.parametric_orbits import parametric_orbit_payloads
 from simulate.astronomy.simulation_clock import (
     reanchor_wall_clock,
     reset_simulation_clock,
     simulation_time,
     time_scaling,
 )
-from simulate.astronomy.utils.ephemeris import ecliptic_to_galactocentric_rotation
+from simulate.astronomy.utils.ephemeris import earth_heliocentric_ecliptic_au, ecliptic_to_galactocentric_rotation
 
 _BODY_NODES: tuple[str, ...] = (
     "sun",
@@ -51,6 +52,10 @@ _ARROW_NODES: tuple[str, ...] = (
     "cmb_dipole_arrow",
 )
 
+_EPHEMERIS_ORBIT_PATHS = frozenset(
+    {"earth_orbit", "moon_orbit", "iss_orbit", "galactic_orbit"},
+)
+
 
 _cache_scene: trimesh.Scene | None = None
 
@@ -61,11 +66,15 @@ def reset_web_scene_cache() -> None:
     reset_simulation_clock()
 
 
-def scene_snapshot_payload(pointing_target: PointingTarget) -> dict[str, Any]:
+def scene_snapshot_payload(
+    pointing_target: PointingTarget,
+    *,
+    include_ephemeris_orbit_paths: bool = True,
+) -> dict[str, Any]:
     scene = _ensure_scene()
     scene.metadata["pointing_target"] = pointing_target
     _advance_animation(scene)
-    return _serialize_scene(scene, pointing_target)
+    return _serialize_scene(scene, pointing_target, include_ephemeris_orbit_paths=include_ephemeris_orbit_paths)
 
 
 def _ensure_scene() -> trimesh.Scene:
@@ -107,10 +116,30 @@ def _advance_animation(scene: trimesh.Scene) -> None:
     animation["last_iss_orbit_time"] = last_iss_orbit_time
 
 
-def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> dict[str, Any]:
+def _include_path_in_snapshot(
+    node_name: str,
+    pointing_target: PointingTarget,
+    include_ephemeris_orbit_paths: bool,
+) -> bool:
+    if node_name in _EPHEMERIS_ORBIT_PATHS:
+        if not include_ephemeris_orbit_paths:
+            return False
+        if node_name == "iss_orbit" and pointing_target != PointingTarget.ISS:
+            return False
+        return True
+    return True
+
+
+def _serialize_scene(
+    scene: trimesh.Scene,
+    pointing_target: PointingTarget,
+    *,
+    include_ephemeris_orbit_paths: bool,
+) -> dict[str, Any]:
     animation = scene.metadata["earth_sun_animation"]
     current = animation["current_time"]
     return {
+        "simulation_time_iso": current.iso,
         "inertial_to_root_rotation": _rotation_to_three(
             ecliptic_to_galactocentric_rotation(current),
         ),
@@ -118,8 +147,9 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         "paths": [
             _serialize_path(scene, node)
             for node in _PATH_NODES
-            if node != "iss_orbit" or pointing_target == PointingTarget.ISS
+            if _include_path_in_snapshot(node, pointing_target, include_ephemeris_orbit_paths)
         ],
+        "parametric_orbits": _serialize_parametric_orbits(scene, current, pointing_target),
         "arrows": [
             _serialize_arrow(scene, node)
             for node in _ARROW_NODES
@@ -140,6 +170,23 @@ def _serialize_body(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
         "color": color,
         "matrix": _matrix_to_three(transform),
     }
+
+
+def _serialize_parametric_orbits(
+    scene: trimesh.Scene,
+    time: Any,
+    pointing_target: PointingTarget,
+) -> list[dict[str, Any]]:
+    payloads = parametric_orbit_payloads(time, pointing_target)
+    for entry in payloads:
+        node_name = entry["name"]
+        transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
+        geometry = scene.geometry[geometry_name]
+        entry["color"] = _path_color(geometry)
+        entry["matrix"] = _matrix_to_three(transform)
+        if entry.get("origin_body") == "earth":
+            entry["origin_heliocentric_au"] = earth_heliocentric_ecliptic_au(time).astype(float).tolist()
+    return payloads
 
 
 def _serialize_path(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:

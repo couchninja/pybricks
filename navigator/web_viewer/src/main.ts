@@ -7,6 +7,7 @@ const SCENE_POLL_FAST_MS = 1000 / 30;
 type TimeScaleStatus = {
   preset: string | null;
   time_iso?: string;
+  time_scaling?: number;
 };
 
 type NavigatorWebStatus = {
@@ -68,8 +69,13 @@ function mountStyles(): void {
   document.head.appendChild(style);
 }
 
-async function fetchScene(): Promise<SceneSnapshot> {
-  const response = await fetch("/api/scene");
+type SceneFetchOptions = {
+  includeEphemerisOrbitPaths: boolean;
+};
+
+async function fetchScene(options: SceneFetchOptions): Promise<SceneSnapshot> {
+  const ephemeris = options.includeEphemerisOrbitPaths ? "1" : "0";
+  const response = await fetch(`/api/scene?ephemeris_orbits=${ephemeris}`);
   if (!response.ok) {
     throw new Error(`scene fetch failed: ${response.status}`);
   }
@@ -98,7 +104,11 @@ function navigatorStatusFromDetail(detail: unknown): NavigatorWebStatus | null {
   if (timeIso !== undefined && typeof timeIso !== "string") {
     return null;
   }
-  return { target, time_scale: { preset, time_iso: timeIso } };
+  const timeScaling = timeScale.time_scaling;
+  if (timeScaling !== undefined && typeof timeScaling !== "number") {
+    return null;
+  }
+  return { target, time_scale: { preset, time_iso: timeIso, time_scaling: timeScaling } };
 }
 
 export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
@@ -109,6 +119,9 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
   let scenePollMs = SCENE_POLL_FAST_MS;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
+  const sidebarLegacyOrbits = document.getElementById("legacy-orbit-lines-control");
+  let includeEphemerisOrbitPaths =
+    sidebarLegacyOrbits instanceof HTMLInputElement ? sidebarLegacyOrbits.checked : false;
 
   const applyScenePollMs = (nextMs: number): void => {
     if (nextMs === scenePollMs) {
@@ -132,6 +145,7 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
     viewer.applyNavigatorStatus({
       target: status.target,
       timeIso: status.time_scale.time_iso ?? null,
+      timeScaling: status.time_scale.time_scaling ?? 1,
     });
   };
 
@@ -141,7 +155,7 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
     }
     inFlight = true;
     try {
-      const snapshot = await fetchScene();
+      const snapshot = await fetchScene({ includeEphemerisOrbitPaths });
       viewer.applySnapshot(snapshot);
     } catch {
       // Keep the last good frame; the status panel still reports navigator state.
@@ -167,6 +181,25 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
   void pollScene().finally(() => {
     scheduleNextScenePoll();
   });
+
+  if (sidebarLegacyOrbits instanceof HTMLInputElement) {
+    sidebarLegacyOrbits.addEventListener("change", () => {
+      includeEphemerisOrbitPaths = sidebarLegacyOrbits.checked;
+      viewer.setLegacySegmentOrbitsVisible(sidebarLegacyOrbits.checked);
+      void pollScene();
+    });
+    viewer.setLegacySegmentOrbitsVisible(sidebarLegacyOrbits.checked);
+  }
+
+  const sidebarParametricOrbits = document.getElementById("parametric-orbit-lines-control");
+  if (sidebarParametricOrbits instanceof HTMLInputElement) {
+    sidebarParametricOrbits.addEventListener("change", () => {
+      viewer.setParametricOrbitsVisible(sidebarParametricOrbits.checked);
+    });
+    viewer.setParametricOrbitsVisible(sidebarParametricOrbits.checked);
+  }
+
+  window.dispatchEvent(new CustomEvent("earth-sun-viewer-ready", { detail: viewer }));
 
   return viewer;
 }

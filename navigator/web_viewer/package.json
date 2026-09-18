@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@tweenjs/tween.js": "^25.0.0",
+    "satellite.js": "^5.0.0",
     "three": "^0.186.0"
   }
 }

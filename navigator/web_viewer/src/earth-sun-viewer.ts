@@ -30,11 +30,22 @@ import {
 import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
 import { createFlatArrowGroup, disposeFlatArrowGroup, orientFlatArrow } from "./billboard-arrow";
 import { createEarthMesh } from "./earth-mesh";
-import type { ArrowDistanceAnchor, Rgb, SceneArrow, SceneBody, ScenePath, SceneSnapshot } from "./scene-types";
+import { sampleKeplerianOrbitPoints, type KeplerianOrbitParams } from "./keplerian-orbit";
+import { parametricOrbitSampleCount } from "./orbit-path-samples";
+import { simulationTimeMsFromIso } from "./simulation-time";
+import { sampleTleOrbitPoints, type TleOrbitParams } from "./tle-orbit";
+import type {
+  ArrowDistanceAnchor,
+  ParametricOrbit,
+  Rgb,
+  SceneArrow,
+  SceneBody,
+  ScenePath,
+  SceneSnapshot,
+} from "./scene-types";
 
 const VIEWER_TARGET_FPS = 60;
 const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
-
 const LABEL_OFFSET_BODY_RADII = 2.5;
 const _labelWorldCenter = new THREE.Vector3();
 const _labelWorldAnchor = new THREE.Vector3();
@@ -179,7 +190,16 @@ export class EarthSunViewer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly bodies = new Map<string, BodyEntry>();
+  private readonly legacySegmentPathsRoot: THREE.Group;
+  private readonly legacyOrbitsRoot: THREE.Group;
+  private readonly parametricPathsRoot: THREE.Group;
   private readonly paths = new Map<string, PathEntry>();
+  private readonly parametricPaths = new Map<string, PathEntry>();
+  private parametricOrbits: ParametricOrbit[] = [];
+  private simTimeAnchorMs = 0;
+  private wallAnchorMs = 0;
+  private timeScaling = 1;
+  private readonly parametricOrbitScratch: THREE.Vector3[] = [];
   private readonly arrows = new Map<string, THREE.Group>();
   private readonly arrowFrames = new Map<string, ArrowFrame>();
   private readonly sunPointLight: THREE.PointLight;
@@ -234,6 +254,13 @@ export class EarthSunViewer {
     this.scene = new THREE.Scene();
     this.contentRoot = new THREE.Group();
     this.contentRoot.name = "content_root";
+    this.legacySegmentPathsRoot = new THREE.Group();
+    this.legacySegmentPathsRoot.name = "legacy_segment_paths";
+    this.legacyOrbitsRoot = new THREE.Group();
+    this.legacyOrbitsRoot.name = "legacy_ephemeris_orbits";
+    this.parametricPathsRoot = new THREE.Group();
+    this.parametricPathsRoot.name = "parametric_paths";
+    this.contentRoot.add(this.legacySegmentPathsRoot, this.legacyOrbitsRoot, this.parametricPathsRoot);
     this.scene.add(this.constellationSky.root, this.contentRoot);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.001, 1000);
@@ -296,9 +323,10 @@ export class EarthSunViewer {
     this.root.remove();
   }
 
-  applyNavigatorStatus(status: { target: string; timeIso: string | null }): void {
+  applyNavigatorStatus(status: { target: string; timeIso: string | null; timeScaling: number }): void {
     if (status.timeIso) {
       this.captionEl.textContent = `Earth-sun (${status.timeIso})`;
+      this.setSimulationClock(status.timeIso, status.timeScaling);
     }
     const targetChanged =
       this.hasInitialCamera &&
@@ -312,8 +340,26 @@ export class EarthSunViewer {
     }
   }
 
+  setLegacySegmentOrbitsVisible(visible: boolean): void {
+    this.legacyOrbitsRoot.visible = visible;
+    const sidebarInput = document.getElementById("legacy-orbit-lines-control");
+    if (sidebarInput instanceof HTMLInputElement && sidebarInput.checked !== visible) {
+      sidebarInput.checked = visible;
+    }
+  }
+
+  setParametricOrbitsVisible(visible: boolean): void {
+    this.parametricPathsRoot.visible = visible;
+    const sidebarInput = document.getElementById("parametric-orbit-lines-control");
+    if (sidebarInput instanceof HTMLInputElement && sidebarInput.checked !== visible) {
+      sidebarInput.checked = visible;
+    }
+  }
+
   applySnapshot(snapshot: SceneSnapshot): void {
     this.sceneSnapshot = snapshot;
+    this.setSimulationClock(snapshot.simulation_time_iso, this.timeScaling);
+    this.parametricOrbits = snapshot.parametric_orbits ?? [];
     this.defaultCameraDistance = DEFAULT_CAMERA_DISTANCE_AU;
     this.earthRadiusAu = EARTH_RADIUS_AU;
     this.earthOrbitRadiusAu = EARTH_ORBIT_RADIUS_AU;
@@ -337,6 +383,8 @@ export class EarthSunViewer {
       this.updatePath(path);
     }
     this.removePathsExcept(snapshot.paths.map((path) => path.name));
+    this.syncParametricOrbitDefinitions();
+    this.updateParametricOrbitGeometry(this.currentSimulationTimeMs());
     for (const arrow of snapshot.arrows) {
       this.updateArrow(arrow);
     }
@@ -405,7 +453,7 @@ export class EarthSunViewer {
     }
 
     if (existing) {
-      this.contentRoot.remove(existing.root);
+      existing.root.parent?.remove(existing.root);
       existing.root.traverse((object) => {
         if (object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -418,6 +466,7 @@ export class EarthSunViewer {
     root.name = path.name;
     root.matrixAutoUpdate = false;
     root.matrix.copy(matrixFromSnapshot(path.matrix));
+    const pathParent = path.name.endsWith("_orbit") ? this.legacyOrbitsRoot : this.legacySegmentPathsRoot;
     for (const segment of path.segments) {
       if (segment.length < 2) {
         continue;
@@ -434,8 +483,105 @@ export class EarthSunViewer {
       });
       root.add(new THREE.Line(geometry, material));
     }
-    this.contentRoot.add(root);
+    pathParent.add(root);
     this.paths.set(path.name, { root, segmentSignature });
+  }
+
+  private setSimulationClock(iso: string, timeScaling: number): void {
+    this.timeScaling = timeScaling > 0 ? timeScaling : 1;
+    this.simTimeAnchorMs = simulationTimeMsFromIso(iso);
+    this.wallAnchorMs = performance.now();
+  }
+
+  private currentSimulationTimeMs(): number {
+    return this.simTimeAnchorMs + (performance.now() - this.wallAnchorMs) * this.timeScaling;
+  }
+
+  private syncParametricOrbitDefinitions(): void {
+    const keep = new Set(this.parametricOrbits.map((orbit) => orbit.name));
+    for (const name of this.parametricPaths.keys()) {
+      if (keep.has(name)) {
+        continue;
+      }
+      const existing = this.parametricPaths.get(name);
+      if (existing) {
+        this.parametricPathsRoot.remove(existing.root);
+        existing.root.traverse((object) => {
+          if (object instanceof THREE.Line) {
+            object.geometry.dispose();
+            (object.material as THREE.Material).dispose();
+          }
+        });
+      }
+      this.parametricPaths.delete(name);
+    }
+    for (const orbit of this.parametricOrbits) {
+      let entry = this.parametricPaths.get(orbit.name);
+      if (!entry) {
+        const root = new THREE.Object3D();
+        root.name = `${orbit.name}_parametric`;
+        root.matrixAutoUpdate = false;
+        this.parametricPathsRoot.add(root);
+        entry = { root, segmentSignature: "" };
+        this.parametricPaths.set(orbit.name, entry);
+      }
+      entry.root.matrixAutoUpdate = false;
+      entry.root.matrix.copy(matrixFromSnapshot(orbit.matrix));
+      entry.root.matrixWorldNeedsUpdate = true;
+    }
+  }
+
+  private updateParametricOrbitGeometry(timeMs: number): void {
+    const originHeliocentric = new THREE.Vector3();
+    for (const orbit of this.parametricOrbits) {
+      const entry = this.parametricPaths.get(orbit.name);
+      if (!entry) {
+        continue;
+      }
+      let origin: THREE.Vector3 | null = null;
+      if (orbit.origin_body === "earth") {
+        const anchor = orbit.origin_heliocentric_au;
+        if (anchor === undefined) {
+          continue;
+        }
+        originHeliocentric.set(anchor[0], anchor[1], anchor[2]);
+        origin = originHeliocentric;
+      }
+      const samples = parametricOrbitSampleCount(orbit.name);
+      if (orbit.kind === "keplerian") {
+        sampleKeplerianOrbitPoints(orbit as KeplerianOrbitParams, timeMs, samples, origin, this.parametricOrbitScratch);
+      } else {
+        sampleTleOrbitPoints(orbit as TleOrbitParams, timeMs, samples, origin, this.parametricOrbitScratch);
+      }
+      const signature = this.parametricOrbitScratch
+        .map((point) => point.toArray())
+        .flat()
+        .join(",");
+      if (entry.segmentSignature === signature) {
+        continue;
+      }
+      entry.root.children
+        .filter((child) => child instanceof THREE.Line)
+        .forEach((line) => {
+          entry.root.remove(line);
+          line.geometry.dispose();
+          (line.material as THREE.Material).dispose();
+        });
+      const points = [...this.parametricOrbitScratch, this.parametricOrbitScratch[0]?.clone()].filter(
+        (point): point is THREE.Vector3 => point !== undefined,
+      );
+      if (points.length < 2) {
+        continue;
+      }
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const material = new THREE.LineBasicMaterial({
+        color: rgbToThree(orbit.color),
+        transparent: true,
+        opacity: 1,
+      });
+      entry.root.add(new THREE.Line(geometry, material));
+      entry.segmentSignature = signature;
+    }
   }
 
   private updateArrow(arrow: SceneArrow): void {
@@ -457,7 +603,7 @@ export class EarthSunViewer {
       }
       const existing = this.paths.get(name);
       if (existing) {
-        this.contentRoot.remove(existing.root);
+        existing.root.parent?.remove(existing.root);
         existing.root.traverse((object) => {
           if (object instanceof THREE.Line) {
             object.geometry.dispose();
@@ -711,6 +857,7 @@ export class EarthSunViewer {
       return;
     }
     this.syncFloatingOrigin();
+    this.updateParametricOrbitGeometry(this.currentSimulationTimeMs());
     this.layoutArrows();
     this.syncClipPlanes();
     this.outlinePipeline.prepareFrame();

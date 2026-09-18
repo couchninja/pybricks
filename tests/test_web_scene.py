@@ -181,13 +181,25 @@ def test_inertial_to_root_rotation_aligns_galactic_center_with_sagittarius() -> 
     assert np.dot(sky_direction, marker_direction) > 0.999
 
 
+def test_scene_snapshot_omits_ephemeris_orbit_paths_when_disabled() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.MOON, include_ephemeris_orbit_paths=False)
+    path_names = {path["name"] for path in payload["paths"]}
+    assert "earth_orbit" not in path_names
+    assert "moon_orbit" not in path_names
+    assert "galactic_orbit" not in path_names
+    assert "earth_axis" in path_names
+
+
 def test_scene_snapshot_omits_viewer_static_metadata() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
     assert set(payload.keys()) == {
+        "simulation_time_iso",
         "inertial_to_root_rotation",
         "bodies",
         "paths",
+        "parametric_orbits",
         "arrows",
     }
     body = next(item for item in payload["bodies"] if item["name"] == "earth")

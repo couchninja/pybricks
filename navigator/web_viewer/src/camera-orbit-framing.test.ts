@@ -10,9 +10,11 @@ function translationMatrix(position: THREE.Vector3): number[] {
 
 function baseSnapshot(overrides: Partial<SceneSnapshot> = {}): SceneSnapshot {
   return {
+    simulation_time_iso: "2020-01-01T00:00:00.000",
     inertial_to_root_rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1],
     bodies: [],
     paths: [],
+    parametric_orbits: [],
     arrows: [],
     ...overrides,
   };
@@ -90,5 +92,55 @@ describe("desiredOrbitTargetCameraPose for ISS", () => {
       const halfFov = THREE.MathUtils.degToRad(camera.fov / 2) * 0.9;
       expect(toPoint.angleTo(toPivot)).toBeLessThanOrEqual(halfFov + 1e-6);
     }
+  });
+
+  it("uses parametric iss_orbit when ephemeris path segments are omitted", () => {
+    const orbitRadius = 0.01;
+    const earthCenter = new THREE.Vector3(0.02, 0, 0);
+    const observer = new THREE.Vector3(0.02, 0, 0.005);
+
+    const snapshot = baseSnapshot({
+      bodies: [
+        {
+          name: "earth",
+          radius: 0.001,
+          color: [0, 0, 1],
+          matrix: translationMatrix(earthCenter),
+        },
+      ],
+      parametric_orbits: [
+        {
+          kind: "keplerian",
+          name: "iss_orbit",
+          color: [1, 1, 1],
+          matrix: translationMatrix(new THREE.Vector3()),
+          epoch_iso: "2020-01-01T00:00:00.000",
+          period_days: 0.06,
+          a_au: orbitRadius,
+          e: 0,
+          i_rad: 0,
+          raan_rad: 0,
+          argp_rad: 0,
+          M0_rad: 0,
+          mu_au3_per_day2: 1e-8,
+          origin_body: "earth",
+          origin_heliocentric_au: [earthCenter.x, earthCenter.y, earthCenter.z],
+        },
+      ],
+    });
+
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.0001, 100);
+    const pose = desiredOrbitTargetCameraPose(
+      camera,
+      snapshot,
+      "iss",
+      observer,
+      (name) => (name === "earth" ? earthCenter.clone() : null),
+      new THREE.Vector3(0, 0, 1),
+      100,
+    );
+
+    const offsetDirection = pose.offset.clone().normalize();
+    expect(Math.abs(offsetDirection.z)).toBeGreaterThan(0.99);
   });
 });

@@ -157,6 +157,32 @@ _INDEX_HTML = """<!DOCTYPE html>
       line-height: 1.2;
       margin-bottom: 0.5rem;
     }
+    .viewer-options {
+      margin-bottom: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .viewer-options-label {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .viewer-option {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+    .viewer-option input {
+      width: 1.1rem;
+      height: 1.1rem;
+      cursor: pointer;
+    }
     .speed {
       font-size: 1.125rem;
       color: var(--muted);
@@ -317,6 +343,17 @@ _INDEX_HTML = """<!DOCTYPE html>
   </div>
   <div class="target" id="target">—</div>
   <div class="speed" id="speed"></div>
+  <div class="viewer-options">
+    <div class="viewer-options-label">Viewer</div>
+    <label class="viewer-option">
+      <input type="checkbox" id="legacy-orbit-lines-control" />
+      Ephemeris orbit lines
+    </label>
+    <label class="viewer-option">
+      <input type="checkbox" id="parametric-orbit-lines-control" checked />
+      Keplerian / TLE orbit lines
+    </label>
+  </div>
   <div class="target-buttons-label">Pointing target</div>
   <div class="target-buttons" id="target-buttons">
 __TARGET_BUTTONS__
@@ -552,6 +589,17 @@ def _request_path(path: str) -> str:
     return path.split("?", 1)[0]
 
 
+def _scene_include_ephemeris_orbit_paths(path: str) -> bool:
+    if "?" not in path:
+        return True
+    query = parse_qs(path.split("?", 1)[1], keep_blank_values=True)
+    values = query.get("ephemeris_orbits")
+    if not values:
+        return True
+    flag = values[-1].lower()
+    return flag not in ("", "0", "false", "no", "off")
+
+
 def _status_include_logs(path: str) -> bool:
     if "?" not in path:
         return False
@@ -759,7 +807,13 @@ async def _handle_client(
             writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/scene" and method == "GET":
             target = buttons.selected_button["target"]
-            snapshot = await asyncio.to_thread(scene_snapshot_payload, target)
+            include_ephemeris = _scene_include_ephemeris_orbit_paths(path)
+            snapshot = await asyncio.to_thread(
+                lambda: scene_snapshot_payload(
+                    target,
+                    include_ephemeris_orbit_paths=include_ephemeris,
+                ),
+            )
             payload = json.dumps(snapshot).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/time-scale" and method == "GET":

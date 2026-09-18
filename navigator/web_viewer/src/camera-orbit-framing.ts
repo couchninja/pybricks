@@ -1,5 +1,6 @@
 import * as THREE from "three";
 
+import { orbitWorldPointsFromSnapshot, snapshotSimulationTimeMs, worldPointsFromScenePath } from "./orbit-path-samples";
 import { DEFAULT_CAMERA_DISTANCE_AU, EARTH_ORBIT_RADIUS_AU, EARTH_RADIUS_AU } from "./scene-viewer-constants";
 import type { ScenePath, SceneSnapshot } from "./scene-types";
 
@@ -51,6 +52,7 @@ const _heavenlyOrbitMatrix = new THREE.Matrix4();
 const _sceneBoundsMin = new THREE.Vector3();
 const _sceneBoundsMax = new THREE.Vector3();
 const _sceneBoundsExtents = new THREE.Vector3();
+const _orbitWorldPoints: THREE.Vector3[] = [];
 
 const BODY_FOR_TARGET: Partial<Record<string, string>> = {
   sun: "sun",
@@ -69,14 +71,17 @@ export type OrbitCameraPose = {
 };
 
 function pathPoints(path: ScenePath): THREE.Vector3[] {
-  const matrix = new THREE.Matrix4().fromArray(path.matrix);
   const points: THREE.Vector3[] = [];
-  for (const segment of path.segments) {
-    for (const [x, y, z] of segment) {
-      points.push(new THREE.Vector3(x, y, z).applyMatrix4(matrix));
-    }
-  }
+  worldPointsFromScenePath(path, points);
   return points;
+}
+
+function orbitPathPoints(snapshot: SceneSnapshot, pathName: string): THREE.Vector3[] {
+  const timeMs = snapshotSimulationTimeMs(snapshot);
+  if (!orbitWorldPointsFromSnapshot(snapshot, pathName, timeMs, _orbitWorldPoints)) {
+    return [];
+  }
+  return _orbitWorldPoints;
 }
 
 function newellPlaneNormal(points: THREE.Vector3[]): THREE.Vector3 | null {
@@ -108,8 +113,7 @@ function lineDirection(points: THREE.Vector3[]): THREE.Vector3 | null {
   return direction.normalize();
 }
 
-function meanPathRadius(path: ScenePath, center: THREE.Vector3): number | null {
-  const points = pathPoints(path);
+function meanRadiusFromPoints(points: THREE.Vector3[], center: THREE.Vector3): number | null {
   if (points.length === 0) {
     return null;
   }
@@ -127,9 +131,8 @@ function orbitPlaneNormal(
 ): THREE.Vector3 {
   const pathName = POINTING_TARGET_ORBIT_PATH[framingPointingTarget(pointingTarget)];
   if (pathName) {
-    const path = snapshot.paths.find((entry) => entry.name === pathName);
-    if (path) {
-      const points = pathPoints(path);
+    const points = orbitPathPoints(snapshot, pathName);
+    if (points.length > 0) {
       const axis = pathName === "earth_axis" ? lineDirection(points) : newellPlaneNormal(points);
       if (axis) {
         return axis.dot(currentOffsetDirection) >= 0 ? axis.clone() : axis.clone().negate();
@@ -233,14 +236,14 @@ function geocentricPathOrbitRadiusAu(
   snapshot: SceneSnapshot,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
 ): number | null {
-  const path = snapshot.paths.find((entry) => entry.name === pathName);
   const centerBody = ORBIT_PATH_CENTER_BODY[pathName];
   const center = centerBody ? bodyWorldPosition(centerBody) : null;
-  if (!path || !center) {
+  const points = orbitPathPoints(snapshot, pathName);
+  if (points.length === 0 || !center) {
     return null;
   }
   _heavenlyOrbitCenter.copy(center);
-  const radius = meanPathRadius(path, _heavenlyOrbitCenter);
+  const radius = meanRadiusFromPoints(points, _heavenlyOrbitCenter);
   if (radius === null || radius <= 0) {
     return null;
   }
@@ -283,11 +286,11 @@ function issOrbitPlaneNormalTowardObserver(
   observer: THREE.Vector3,
   currentOffsetDirection: THREE.Vector3,
 ): THREE.Vector3 | null {
-  const path = snapshot.paths.find((entry) => entry.name === "iss_orbit");
-  if (!path) {
+  const points = orbitPathPoints(snapshot, "iss_orbit");
+  if (points.length === 0) {
     return null;
   }
-  const normal = newellPlaneNormal(pathPoints(path));
+  const normal = newellPlaneNormal(points);
   if (!normal) {
     return null;
   }
@@ -366,11 +369,10 @@ function desiredIssOrbitCameraPose(
     return null;
   }
 
-  const path = snapshot.paths.find((entry) => entry.name === "iss_orbit");
-  if (!path) {
+  const orbitPoints = orbitPathPoints(snapshot, "iss_orbit");
+  if (orbitPoints.length === 0) {
     return null;
   }
-  const orbitPoints = pathPoints(path);
   const toward = targetWorldPosition(snapshot, pointingTarget, observer, bodyWorldPosition);
   const up = inPlaneHorizontal(normal, observer, toward);
 
@@ -406,11 +408,11 @@ function orbitRadiusAu(
 
   const pathName = POINTING_TARGET_ORBIT_PATH[target];
   if (pathName && pathName !== "earth_axis") {
-    const path = snapshot.paths.find((entry) => entry.name === pathName);
     const centerBody = ORBIT_PATH_CENTER_BODY[pathName];
     const center = centerBody ? bodyWorldPosition(centerBody) : null;
-    if (path && center) {
-      const radius = meanPathRadius(path, center);
+    const points = orbitPathPoints(snapshot, pathName);
+    if (center && points.length > 0) {
+      const radius = meanRadiusFromPoints(points, center);
       if (radius !== null && radius > 0) {
         return radius;
       }
@@ -583,6 +585,18 @@ export function sceneScaleAuFromSnapshot(snapshot: SceneSnapshot): number {
       includePoint(point.x, point.y, point.z);
     }
   }
+  const timeMs = snapshotSimulationTimeMs(snapshot);
+  for (const orbit of snapshot.parametric_orbits) {
+    if (snapshot.paths.some((path) => path.name === orbit.name)) {
+      continue;
+    }
+    if (!orbitWorldPointsFromSnapshot(snapshot, orbit.name, timeMs, _orbitWorldPoints)) {
+      continue;
+    }
+    for (const point of _orbitWorldPoints) {
+      includePoint(point.x, point.y, point.z);
+    }
+  }
   for (const arrow of snapshot.arrows) {
     includePoint(arrow.base[0], arrow.base[1], arrow.base[2]);
   }
@@ -597,14 +611,17 @@ export function sceneScaleAuFromSnapshot(snapshot: SceneSnapshot): number {
 /** Galactic orbit diameter; upper bound for camera distance from the orbit pivot. */
 export function milkyWayDiameterAuFromSnapshot(snapshot: SceneSnapshot): number {
   const galacticCenter = snapshot.bodies.find((body) => body.name === "galactic_center");
-  const galacticOrbit = snapshot.paths.find((path) => path.name === "galactic_orbit");
-  if (!galacticCenter || !galacticOrbit) {
+  if (!galacticCenter) {
+    return 0;
+  }
+  const orbitPoints = orbitPathPoints(snapshot, "galactic_orbit");
+  if (orbitPoints.length === 0) {
     return 0;
   }
   _heavenlyOrbitMatrix.fromArray(galacticCenter.matrix);
   _heavenlyOrbitCenter.setFromMatrixPosition(_heavenlyOrbitMatrix);
   let maxRadius = 0;
-  for (const point of pathPoints(galacticOrbit)) {
+  for (const point of orbitPoints) {
     maxRadius = Math.max(maxRadius, point.distanceTo(_heavenlyOrbitCenter));
   }
   return 2 * maxRadius;
