@@ -301,6 +301,7 @@ export class EarthSunViewer {
     for (const path of snapshot.paths) {
       this.updatePath(path);
     }
+    this.removePathsExcept(snapshot.paths.map((path) => path.name));
     for (const arrow of snapshot.arrows) {
       this.updateArrow(arrow);
     }
@@ -418,6 +419,26 @@ export class EarthSunViewer {
       displayLengthAu: -1,
       displayGapAu: -1,
     });
+  }
+
+  private removePathsExcept(names: string[]): void {
+    const keep = new Set(names);
+    for (const name of this.paths.keys()) {
+      if (keep.has(name)) {
+        continue;
+      }
+      const existing = this.paths.get(name);
+      if (existing) {
+        this.contentRoot.remove(existing.root);
+        existing.root.traverse((object) => {
+          if (object instanceof THREE.Line) {
+            object.geometry.dispose();
+            (object.material as THREE.Material).dispose();
+          }
+        });
+      }
+      this.paths.delete(name);
+    }
   }
 
   private removeArrowsExcept(names: string[]): void {
