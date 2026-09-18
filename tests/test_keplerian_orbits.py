@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from astropy import units as u
 from astropy.time import Time
 
@@ -8,8 +9,14 @@ from simulate.astronomy.keplerian import (
     keplerian_position_au,
     sun_gravitational_parameter_au3_per_day2,
 )
+from simulate.astronomy.utils import iss_tle
 from simulate.astronomy.utils.ephemeris import earth_heliocentric_ecliptic_au
 from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
+
+
+@pytest.fixture(autouse=True)
+def _iss_tle_offline() -> None:
+    iss_tle.set_celestrak_fetch_allowed(False)
 
 
 def test_keplerian_earth_matches_ephemeris_near_epoch() -> None:
