@@ -17,12 +17,30 @@ def test_build_raises_without_npm() -> None:
         build_web_viewer_if_ready()
 
 
-def test_build_runs_npm_install_when_node_modules_missing(tmp_path: Path) -> None:
+def test_build_skips_when_viewer_js_is_up_to_date(tmp_path: Path) -> None:
     viewer_dir = tmp_path / "web_viewer"
-    viewer_dir.mkdir()
+    (viewer_dir / "dist").mkdir(parents=True)
+    (viewer_dir / "package.json").write_text("{}", encoding="utf-8")
+    viewer_js = viewer_dir / "dist" / "viewer.js"
+    viewer_js.write_text("built", encoding="utf-8")
     with (
         patch("navigator.web_viewer_build.shutil.which", return_value="/usr/bin/npm"),
         patch("navigator.web_viewer_build._WEB_VIEWER_DIR", viewer_dir),
+        patch("navigator.web_viewer_build._VIEWER_JS", viewer_js),
+        patch("navigator.web_viewer_build.subprocess.run") as run,
+    ):
+        build_web_viewer_if_ready()
+    run.assert_not_called()
+
+
+def test_build_runs_npm_install_when_node_modules_missing(tmp_path: Path) -> None:
+    viewer_dir = tmp_path / "web_viewer"
+    viewer_dir.mkdir()
+    viewer_js = viewer_dir / "dist" / "viewer.js"
+    with (
+        patch("navigator.web_viewer_build.shutil.which", return_value="/usr/bin/npm"),
+        patch("navigator.web_viewer_build._WEB_VIEWER_DIR", viewer_dir),
+        patch("navigator.web_viewer_build._VIEWER_JS", viewer_js),
         patch("navigator.web_viewer_build.subprocess.run") as run,
     ):
         build_web_viewer_if_ready()
@@ -36,9 +54,11 @@ def test_build_runs_npm_install_even_when_node_modules_exists(tmp_path: Path) ->
     viewer_dir = tmp_path / "web_viewer"
     viewer_dir.mkdir()
     (viewer_dir / "node_modules").mkdir()
+    viewer_js = viewer_dir / "dist" / "viewer.js"
     with (
         patch("navigator.web_viewer_build.shutil.which", return_value="/usr/bin/npm"),
         patch("navigator.web_viewer_build._WEB_VIEWER_DIR", viewer_dir),
+        patch("navigator.web_viewer_build._VIEWER_JS", viewer_js),
         patch("navigator.web_viewer_build.subprocess.run") as run,
     ):
         build_web_viewer_if_ready()
