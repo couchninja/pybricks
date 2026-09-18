@@ -1,5 +1,5 @@
 [Unit]
-Description=Pybricks navigator (LEGO Move Hub)
+Description=Navigator (LEGO Move Hub)
 After=bluetooth.service dbus.service
 Wants=bluetooth.service
 

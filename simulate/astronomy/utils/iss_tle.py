@@ -8,12 +8,12 @@ from pathlib import Path
 ISS_TLE_FETCH_FROM_CELESTRAK = True
 ISS_TLE_CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE"
 ISS_TLE_FETCH_TIMEOUT_S = 15.0
-ISS_TLE_USER_AGENT = "pybricks-iss-tle"
+ISS_TLE_USER_AGENT = "navigator-iss-tle"
 ISS_TLE_NETWORK_RETRY_INTERVAL_S = 60.0
 ISS_TLE_REFRESH_INTERVAL_S = 3600.0
 
 _BUNDLED_TLE_PATH = Path(__file__).resolve().parent.parent / "data" / "iss.tle"
-_CACHE_TLE_PATH = Path.home() / ".cache" / "pybricks" / "iss.tle"
+_CACHE_TLE_PATH = Path.home() / ".cache" / "navigator" / "iss.tle"
 
 _network_retry_after_monotonic = 0.0
 _active_tle_lines: tuple[str, str, str] | None = None
