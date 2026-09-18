@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 
 import { desiredOrbitTargetCameraPose } from "./camera-orbit-framing";
+import { EARTH_ORBIT_RADIUS_AU } from "./scene-viewer-constants";
 import type { SceneSnapshot } from "./scene-types";
 
 function translationMatrix(position: THREE.Vector3): number[] {
@@ -142,5 +143,31 @@ describe("desiredOrbitTargetCameraPose for ISS", () => {
 
     const offsetDirection = pose.offset.clone().normalize();
     expect(Math.abs(offsetDirection.z)).toBeGreaterThan(0.99);
+  });
+
+  it("falls back to heliocentric orbit scale when iss_orbit geometry is missing", () => {
+    const earthCenter = new THREE.Vector3(0, 0, 0);
+    const observer = new THREE.Vector3(0, 0, 4e-5);
+    const snapshot = baseSnapshot({
+      bodies: [
+        {
+          name: "earth",
+          radius: 0.001,
+          color: [0, 0, 1],
+          matrix: translationMatrix(earthCenter),
+        },
+      ],
+    });
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.0001, 100);
+    const pose = desiredOrbitTargetCameraPose(
+      camera,
+      snapshot,
+      "iss",
+      observer,
+      (name) => (name === "earth" ? earthCenter.clone() : null),
+      new THREE.Vector3(0, 0, 1),
+      100,
+    );
+    expect(pose.offset.length()).toBeGreaterThan(EARTH_ORBIT_RADIUS_AU * 0.5);
   });
 });

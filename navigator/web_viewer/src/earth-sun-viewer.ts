@@ -230,6 +230,8 @@ export class EarthSunViewer {
   private hasInitialCamera = false;
   private lastPointingTarget: string | null = null;
   private pointingTarget = "";
+  /** Target changed before the next scene snapshot (e.g. ISS TLE) was loaded. */
+  private pendingPointingTargetCamera = false;
   private cameraOrbitTween: CameraOrbitTweenHandle | null = null;
   private cameraOrbitTweenUntil = 0;
   private sceneSnapshot: SceneSnapshot | null = null;
@@ -335,8 +337,8 @@ export class EarthSunViewer {
       status.target !== this.lastPointingTarget;
     this.pointingTarget = status.target;
     this.lastPointingTarget = status.target;
-    if (targetChanged && this.sceneSnapshot) {
-      this.animateCameraForPointingTarget(this.sceneSnapshot);
+    if (targetChanged) {
+      this.pendingPointingTargetCamera = true;
     }
   }
 
@@ -396,6 +398,10 @@ export class EarthSunViewer {
     if (!this.hasInitialCamera) {
       this.resetCamera();
       this.hasInitialCamera = true;
+    }
+    if (this.pendingPointingTargetCamera && this.pointingTarget !== "") {
+      this.pendingPointingTargetCamera = false;
+      this.animateCameraForPointingTarget(snapshot);
     }
     this.lastRenderTime = 0;
   }
