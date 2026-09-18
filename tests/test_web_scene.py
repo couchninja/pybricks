@@ -25,7 +25,8 @@ def test_scene_snapshot_json_serializable() -> None:
     assert "earth" in body_names
     assert "sun" in body_names
     assert "observer" in body_names
-    assert payload["time_iso"]
+    assert "time_iso" not in payload
+    assert "pointing_target" not in payload
     path_names = {path["name"] for path in payload["paths"]}
     assert "earth_orbit" in path_names
     assert "moon_orbit" in path_names
@@ -152,13 +153,6 @@ def test_iss_orbit_loops_near_earth() -> None:
     orbit_points = _path_world_segment(iss_orbit)
     iss_on_orbit = float(np.min(np.linalg.norm(orbit_points - iss_position, axis=1)))
     assert iss_on_orbit < 1e-6
-
-
-def test_scene_snapshot_follows_pointing_target() -> None:
-    reset_web_scene_cache()
-    payload = scene_snapshot_payload(PointingTarget.MOON)
-    assert payload["pointing_target"] == PointingTarget.MOON.value
-    assert payload["pointing_target_label"] == PointingTarget.MOON.label
 
 
 def test_observer_arrow_color_matches_button_for_target() -> None:

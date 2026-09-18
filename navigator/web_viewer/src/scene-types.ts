@@ -26,9 +26,6 @@ export type SceneArrow = {
 };
 
 export type SceneSnapshot = {
-  time_iso: string;
-  pointing_target: string;
-  pointing_target_label: string;
   scene_scale: number;
   default_camera_distance_au: number;
   earth_radius_au: number;

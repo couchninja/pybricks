@@ -187,6 +187,7 @@ export class EarthSunViewer {
   private fpsDisplay = 0;
   private hasInitialCamera = false;
   private lastPointingTarget: string | null = null;
+  private pointingTarget = "";
   private cameraOrbitTween: CameraOrbitTweenHandle | null = null;
   private cameraOrbitTweenUntil = 0;
   private sceneSnapshot: SceneSnapshot | null = null;
@@ -273,6 +274,22 @@ export class EarthSunViewer {
     this.root.remove();
   }
 
+  applyNavigatorStatus(status: { target: string; timeIso: string | null }): void {
+    if (status.timeIso) {
+      this.captionEl.textContent = `Earth-sun (${status.timeIso})`;
+    }
+    const targetChanged =
+      this.hasInitialCamera &&
+      this.lastPointingTarget !== null &&
+      status.target !== "" &&
+      status.target !== this.lastPointingTarget;
+    this.pointingTarget = status.target;
+    this.lastPointingTarget = status.target;
+    if (targetChanged && this.sceneSnapshot) {
+      this.animateCameraForPointingTarget(this.sceneSnapshot);
+    }
+  }
+
   applySnapshot(snapshot: SceneSnapshot): void {
     this.sceneSnapshot = snapshot;
     this.defaultCameraDistance = snapshot.default_camera_distance_au;
@@ -293,7 +310,6 @@ export class EarthSunViewer {
       this.controls.maxDistance = snapshot.milky_way_diameter_au;
     }
     this.clampCameraDistance();
-    this.captionEl.textContent = `Earth-sun (${snapshot.time_iso})`;
 
     for (const body of snapshot.bodies) {
       this.updateBody(body);
@@ -310,18 +326,9 @@ export class EarthSunViewer {
     this.syncClipPlanes();
     this.updateLabels();
     this.syncOrbitPivot();
-    const pointingTarget = snapshot.pointing_target ?? snapshot.pointing_target_label ?? "";
-    const targetChanged =
-      this.hasInitialCamera &&
-      this.lastPointingTarget !== null &&
-      pointingTarget !== "" &&
-      pointingTarget !== this.lastPointingTarget;
-    this.lastPointingTarget = pointingTarget;
     if (!this.hasInitialCamera) {
       this.resetCamera();
       this.hasInitialCamera = true;
-    } else if (targetChanged) {
-      this.animateCameraForPointingTarget(snapshot);
     }
     this.lastRenderTime = 0;
   }
@@ -731,6 +738,7 @@ export class EarthSunViewer {
     const endPose = desiredOrbitTargetCameraPose(
       this.camera,
       snapshot,
+      this.pointingTarget,
       this.observerPosition,
       (name) => this.bodyWorldPosition(name),
       currentOffsetDirection,

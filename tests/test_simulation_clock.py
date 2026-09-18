@@ -44,8 +44,9 @@ def test_sync_to_realtime_resets_scale() -> None:
 def test_scene_snapshot_honors_time_scale_preset() -> None:
     reset_web_scene_cache()
     set_time_scale_preset("hour")
-    payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
-    assert payload["time_iso"]
+    json.dumps(scene_snapshot_payload(PointingTarget.EARTH_ROTATION))
+    status = time_scale_status_payload()
+    assert status["time_iso"]
     assert time_scaling() == TIME_SCALE_ONE_HOUR_PER_SECOND
 
 

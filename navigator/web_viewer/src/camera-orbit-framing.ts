@@ -116,8 +116,12 @@ function meanPathRadius(path: ScenePath, center: THREE.Vector3): number | null {
   return sum / points.length;
 }
 
-function orbitPlaneNormal(snapshot: SceneSnapshot, currentOffsetDirection: THREE.Vector3): THREE.Vector3 {
-  const pathName = POINTING_TARGET_ORBIT_PATH[framingPointingTarget(snapshot.pointing_target)];
+function orbitPlaneNormal(
+  snapshot: SceneSnapshot,
+  pointingTarget: string,
+  currentOffsetDirection: THREE.Vector3,
+): THREE.Vector3 {
+  const pathName = POINTING_TARGET_ORBIT_PATH[framingPointingTarget(pointingTarget)];
   if (pathName) {
     const path = snapshot.paths.find((entry) => entry.name === pathName);
     if (path) {
@@ -156,17 +160,18 @@ function inPlaneHorizontal(normal: THREE.Vector3, observer: THREE.Vector3, towar
 
 function targetWorldPosition(
   snapshot: SceneSnapshot,
+  pointingTarget: string,
   observer: THREE.Vector3,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
 ): THREE.Vector3 {
-  const bodyName = BODY_FOR_TARGET[framingPointingTarget(snapshot.pointing_target)];
+  const bodyName = BODY_FOR_TARGET[framingPointingTarget(pointingTarget)];
   if (bodyName) {
     const bodyPosition = bodyWorldPosition(bodyName);
     if (bodyPosition) {
       return bodyPosition;
     }
   }
-  if (snapshot.pointing_target === "cmb_dipole") {
+  if (pointingTarget === "cmb_dipole") {
     const cmb = snapshot.arrows.find((entry) => entry.name === "cmb_dipole_arrow");
     if (cmb) {
       const extent = Math.max(snapshot.default_camera_distance_au, snapshot.scene_scale);
@@ -342,6 +347,7 @@ function minDistanceToFramePointsInView(
 function desiredIssOrbitCameraPose(
   camera: THREE.PerspectiveCamera,
   snapshot: SceneSnapshot,
+  pointingTarget: string,
   observer: THREE.Vector3,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
   currentOffsetDirection: THREE.Vector3,
@@ -361,7 +367,7 @@ function desiredIssOrbitCameraPose(
     return null;
   }
   const orbitPoints = pathPoints(path);
-  const toward = targetWorldPosition(snapshot, observer, bodyWorldPosition);
+  const toward = targetWorldPosition(snapshot, pointingTarget, observer, bodyWorldPosition);
   const up = inPlaneHorizontal(normal, observer, toward);
 
   const minDistance = Math.max(snapshot.default_camera_distance_au * 0.01, 1e-14);
@@ -377,8 +383,12 @@ function desiredIssOrbitCameraPose(
   };
 }
 
-function orbitRadiusAu(snapshot: SceneSnapshot, bodyWorldPosition: (name: string) => THREE.Vector3 | null): number {
-  const target = framingPointingTarget(snapshot.pointing_target);
+function orbitRadiusAu(
+  snapshot: SceneSnapshot,
+  pointingTarget: string,
+  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
+): number {
+  const target = framingPointingTarget(pointingTarget);
 
   if (target === "moon" || target === "iss") {
     const bodyName = BODY_FOR_TARGET[target];
@@ -409,6 +419,7 @@ function orbitRadiusAu(snapshot: SceneSnapshot, bodyWorldPosition: (name: string
 function desiredEarthRotationCameraPose(
   camera: THREE.PerspectiveCamera,
   snapshot: SceneSnapshot,
+  pointingTarget: string,
   observer: THREE.Vector3,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
   currentOffsetDirection: THREE.Vector3,
@@ -427,7 +438,7 @@ function desiredEarthRotationCameraPose(
     outward.normalize();
   }
 
-  let up = orbitPlaneNormal(snapshot, currentOffsetDirection);
+  let up = orbitPlaneNormal(snapshot, pointingTarget, currentOffsetDirection);
   if (up.dot(WORLD_UP) < 0) {
     up = up.negate();
   }
@@ -452,15 +463,17 @@ function desiredEarthRotationCameraPose(
 export function desiredOrbitTargetCameraPose(
   camera: THREE.PerspectiveCamera,
   snapshot: SceneSnapshot,
+  pointingTarget: string,
   observer: THREE.Vector3,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
   currentOffsetDirection: THREE.Vector3,
   maxDistance: number,
 ): OrbitCameraPose {
-  if (framingPointingTarget(snapshot.pointing_target) === "iss") {
+  if (framingPointingTarget(pointingTarget) === "iss") {
     const issPose = desiredIssOrbitCameraPose(
       camera,
       snapshot,
+      pointingTarget,
       observer,
       bodyWorldPosition,
       currentOffsetDirection,
@@ -471,10 +484,11 @@ export function desiredOrbitTargetCameraPose(
     }
   }
 
-  if (snapshot.pointing_target === "earth_rotation") {
+  if (pointingTarget === "earth_rotation") {
     const earthPose = desiredEarthRotationCameraPose(
       camera,
       snapshot,
+      pointingTarget,
       observer,
       bodyWorldPosition,
       currentOffsetDirection,
@@ -484,12 +498,12 @@ export function desiredOrbitTargetCameraPose(
     }
   }
 
-  let normal = orbitPlaneNormal(snapshot, currentOffsetDirection);
+  let normal = orbitPlaneNormal(snapshot, pointingTarget, currentOffsetDirection);
   if (normal.dot(WORLD_UP) < 0) {
     normal = normal.negate();
   }
 
-  const toward = targetWorldPosition(snapshot, observer, bodyWorldPosition);
+  const toward = targetWorldPosition(snapshot, pointingTarget, observer, bodyWorldPosition);
   const horizontal = inPlaneHorizontal(normal, observer, toward);
 
   const elevation = ORBIT_PLANE_ELEVATION_RAD;
@@ -499,7 +513,7 @@ export function desiredOrbitTargetCameraPose(
     .add(normal.clone().multiplyScalar(Math.sin(elevation)))
     .normalize();
 
-  let distance = orbitRadiusAu(snapshot, bodyWorldPosition);
+  let distance = orbitRadiusAu(snapshot, pointingTarget, bodyWorldPosition);
   if (Number.isFinite(maxDistance) && maxDistance > 0) {
     distance = Math.min(distance, maxDistance);
   }

@@ -6,7 +6,6 @@ from typing import Any
 
 import numpy as np
 import trimesh
-from astropy.time import Time
 from trimesh.visual.color import ColorVisuals
 
 from simulate.astronomy.constants import (
@@ -32,7 +31,7 @@ from simulate.astronomy.simulation_clock import (
     time_scaling,
 )
 from simulate.astronomy.utils.camera import camera_clip_planes
-from simulate.astronomy.utils.ephemeris import current_time, ecliptic_to_galactocentric_rotation
+from simulate.astronomy.utils.ephemeris import ecliptic_to_galactocentric_rotation
 
 _BODY_NODES: tuple[tuple[str, str], ...] = (
     ("sun", "Sun"),
@@ -117,13 +116,9 @@ def _advance_animation(scene: trimesh.Scene) -> None:
 def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> dict[str, Any]:
     animation = scene.metadata["earth_sun_animation"]
     current = animation["current_time"]
-    time_iso = current.iso if isinstance(current, Time) else current_time().iso
     default_camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
     z_near, z_far = camera_clip_planes(scene, camera_distance=default_camera_distance)
     return {
-        "time_iso": time_iso,
-        "pointing_target": pointing_target.value,
-        "pointing_target_label": pointing_target.label,
         "scene_scale": float(scene.scale),
         "default_camera_distance_au": default_camera_distance,
         "earth_radius_au": EARTH_RADIUS_AU,

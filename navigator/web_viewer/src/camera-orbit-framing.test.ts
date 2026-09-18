@@ -10,9 +10,6 @@ function translationMatrix(position: THREE.Vector3): number[] {
 
 function baseSnapshot(overrides: Partial<SceneSnapshot> = {}): SceneSnapshot {
   return {
-    time_iso: "2020-01-01T00:00:00Z",
-    pointing_target: "iss",
-    pointing_target_label: "ISS",
     scene_scale: 2,
     default_camera_distance_au: 1,
     earth_radius_au: 0.001,
@@ -87,6 +84,7 @@ describe("desiredOrbitTargetCameraPose for ISS", () => {
     const pose = desiredOrbitTargetCameraPose(
       camera,
       snapshot,
+      "iss",
       observer,
       bodyWorldPosition,
       new THREE.Vector3(0, 0, 1),

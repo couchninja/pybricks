@@ -1,12 +1,17 @@
 import { EarthSunViewer } from "./earth-sun-viewer";
 import type { SceneSnapshot } from "./scene-types";
 
-const SCENE_POLL_REALTIME_MS = 1000;
+const SCENE_POLL_REALTIME_MS = 10_000;
 const SCENE_POLL_FAST_MS = 1000 / 30;
-const TIME_SCALE_POLL_MS = 500;
 
 type TimeScaleStatus = {
   preset: string | null;
+  time_iso?: string;
+};
+
+type NavigatorWebStatus = {
+  target: string;
+  time_scale: TimeScaleStatus;
 };
 
 function scenePollIntervalMs(preset: string | null): number {
@@ -71,16 +76,29 @@ async function fetchScene(): Promise<SceneSnapshot> {
   return response.json() as Promise<SceneSnapshot>;
 }
 
-async function fetchTimeScaleStatus(): Promise<TimeScaleStatus | null> {
-  try {
-    const response = await fetch("/api/time-scale");
-    if (!response.ok) {
-      return null;
-    }
-    return response.json() as Promise<TimeScaleStatus>;
-  } catch {
+function navigatorStatusFromDetail(detail: unknown): NavigatorWebStatus | null {
+  if (detail === null || typeof detail !== "object") {
     return null;
   }
+  const record = detail as Record<string, unknown>;
+  const target = record.target;
+  if (typeof target !== "string") {
+    return null;
+  }
+  const timeScaleRaw = record.time_scale;
+  if (timeScaleRaw === null || typeof timeScaleRaw !== "object" || !("preset" in timeScaleRaw)) {
+    return null;
+  }
+  const timeScale = timeScaleRaw as TimeScaleStatus;
+  const preset = timeScale.preset;
+  if (preset !== null && typeof preset !== "string") {
+    return null;
+  }
+  const timeIso = timeScale.time_iso;
+  if (timeIso !== undefined && typeof timeIso !== "string") {
+    return null;
+  }
+  return { target, time_scale: { preset, time_iso: timeIso } };
 }
 
 export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
@@ -105,12 +123,16 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
     }
   };
 
-  const refreshScenePollRate = async (): Promise<void> => {
-    const status = await fetchTimeScaleStatus();
+  const applyNavigatorStatus = (detail: unknown): void => {
+    const status = navigatorStatusFromDetail(detail);
     if (status === null) {
       return;
     }
-    applyScenePollMs(scenePollIntervalMs(status.preset));
+    applyScenePollMs(scenePollIntervalMs(status.time_scale.preset));
+    viewer.applyNavigatorStatus({
+      target: status.target,
+      timeIso: status.time_scale.time_iso ?? null,
+    });
   };
 
   const pollScene = async (): Promise<void> => {
@@ -137,14 +159,14 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
     }, scenePollMs);
   };
 
-  void refreshScenePollRate().then(() => {
-    void pollScene().finally(() => {
-      scheduleNextScenePoll();
-    });
+  window.addEventListener("navigator-status", (event) => {
+    applyNavigatorStatus((event as CustomEvent).detail);
   });
-  window.setInterval(() => {
-    void refreshScenePollRate();
-  }, TIME_SCALE_POLL_MS);
+  applyNavigatorStatus((window as Window & { __navigatorLastStatus?: unknown }).__navigatorLastStatus);
+
+  void pollScene().finally(() => {
+    scheduleNextScenePoll();
+  });
 
   return viewer;
 }
