@@ -29,7 +29,7 @@ from simulate.astronomy.constants import (
     PointingTarget,
 )
 from simulate.astronomy.utils.iers_refresh import configure_iers, ensure_iers_table_loaded
-from simulate.astronomy.utils.iss import iss_geocentric_gcrs_km
+from simulate.astronomy.utils.iss import iss_geocentric_gcrs_km, iss_orbital_period
 
 configure_iers()
 ensure_iers_table_loaded()
@@ -88,6 +88,14 @@ def moon_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
             cartesian.z.to_value(u.au),
         ]
     )
+    return geocentric + earth_heliocentric_ecliptic_au(time)
+
+
+def iss_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
+    """Geocentric ISS track in heliocentric ecliptic coords, anchored at Earth's position at ``time``."""
+    period = iss_orbital_period(time)
+    times = time + np.linspace(-0.5, 0.5, samples, endpoint=False) * period
+    geocentric = np.array([iss_geocentric_ecliptic_au(t) for t in times])
     return geocentric + earth_heliocentric_ecliptic_au(time)
 
 

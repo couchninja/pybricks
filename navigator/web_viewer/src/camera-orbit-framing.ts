@@ -20,7 +20,7 @@ const POINTING_TARGET_ORBIT_PATH: Partial<Record<string, string>> = {
   sun: "earth_orbit",
   sun_orbit: "earth_orbit",
   moon: "moon_orbit",
-  iss: "earth_orbit",
+  iss: "iss_orbit",
   milky_way_center: "galactic_orbit",
   milky_way_orbit: "galactic_orbit",
   cmb_dipole: "galactic_orbit",
@@ -30,8 +30,23 @@ const POINTING_TARGET_ORBIT_PATH: Partial<Record<string, string>> = {
 const ORBIT_PATH_CENTER_BODY: Partial<Record<string, string>> = {
   earth_orbit: "sun",
   moon_orbit: "earth",
+  iss_orbit: "earth",
   galactic_orbit: "galactic_center",
 };
+
+const HEAVENLY_BODY_ORBIT_PATH: Partial<Record<string, string>> = {
+  sun: "earth_orbit",
+  moon: "moon_orbit",
+  iss: "iss_orbit",
+  galactic_center: "galactic_orbit",
+};
+
+/** Orbits around Earth (LEO, lunar); reject heliocentric paths misread as geocentric. */
+const MAX_GEOCENTRIC_ORBIT_RADIUS_AU = 0.01;
+
+const _heavenlyOrbitCenter = new THREE.Vector3();
+const _heavenlyOrbitBody = new THREE.Vector3();
+const _heavenlyOrbitMatrix = new THREE.Matrix4();
 
 const BODY_FOR_TARGET: Partial<Record<string, string>> = {
   sun: "sun",
@@ -178,6 +193,94 @@ function targetWorldPosition(
   return observer.clone().add(new THREE.Vector3(0, 0, snapshot.default_camera_distance_au));
 }
 
+function bodyPositionFromSnapshot(
+  snapshot: SceneSnapshot,
+  name: string,
+  target: THREE.Vector3,
+): boolean {
+  const entry = snapshot.bodies.find((body) => body.name === name);
+  if (!entry) {
+    return false;
+  }
+  _heavenlyOrbitMatrix.fromArray(entry.matrix);
+  target.setFromMatrixPosition(_heavenlyOrbitMatrix);
+  return true;
+}
+
+function geocentricOrbitRadiusFromSnapshot(
+  bodyName: string,
+  snapshot: SceneSnapshot,
+): number | null {
+  if (!bodyPositionFromSnapshot(snapshot, "earth", _heavenlyOrbitCenter)) {
+    return null;
+  }
+  if (!bodyPositionFromSnapshot(snapshot, bodyName, _heavenlyOrbitBody)) {
+    return null;
+  }
+  return _heavenlyOrbitBody.distanceTo(_heavenlyOrbitCenter);
+}
+
+function geocentricBodyOrbitRadiusAu(
+  bodyName: string,
+  snapshot: SceneSnapshot,
+  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
+): number | null {
+  const earth = bodyWorldPosition("earth");
+  const body = bodyWorldPosition(bodyName);
+  if (earth && body) {
+    _heavenlyOrbitCenter.copy(earth);
+    _heavenlyOrbitBody.copy(body);
+    const liveRadius = _heavenlyOrbitBody.distanceTo(_heavenlyOrbitCenter);
+    if (liveRadius > 1e-10) {
+      return liveRadius;
+    }
+  }
+  return geocentricOrbitRadiusFromSnapshot(bodyName, snapshot);
+}
+
+function geocentricPathOrbitRadiusAu(
+  pathName: string,
+  snapshot: SceneSnapshot,
+  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
+): number | null {
+  const path = snapshot.paths.find((entry) => entry.name === pathName);
+  const centerBody = ORBIT_PATH_CENTER_BODY[pathName];
+  const center = centerBody ? bodyWorldPosition(centerBody) : null;
+  if (!path || !center) {
+    return null;
+  }
+  _heavenlyOrbitCenter.copy(center);
+  const radius = meanPathRadius(path, _heavenlyOrbitCenter);
+  if (radius === null || radius <= 0) {
+    return null;
+  }
+  if (centerBody === "earth" && radius > MAX_GEOCENTRIC_ORBIT_RADIUS_AU) {
+    return null;
+  }
+  return radius;
+}
+
+export function heavenlyBodyOrbitRadiusAu(
+  bodyName: string,
+  snapshot: SceneSnapshot,
+  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
+): number | null {
+  if (bodyName === "earth" || bodyName === "observer") {
+    return null;
+  }
+  const pathName = HEAVENLY_BODY_ORBIT_PATH[bodyName];
+  if (pathName) {
+    const pathRadius = geocentricPathOrbitRadiusAu(pathName, snapshot, bodyWorldPosition);
+    if (pathRadius !== null) {
+      return pathRadius;
+    }
+  }
+  if (bodyName === "moon" || bodyName === "iss") {
+    return geocentricBodyOrbitRadiusAu(bodyName, snapshot, bodyWorldPosition);
+  }
+  return snapshot.earth_orbit_radius_au;
+}
+
 function orbitRadiusAu(
   snapshot: SceneSnapshot,
   bodyWorldPosition: (name: string) => THREE.Vector3 | null,
@@ -185,11 +288,12 @@ function orbitRadiusAu(
   const target = framingPointingTarget(snapshot.pointing_target);
 
   if (target === "moon" || target === "iss") {
-    const earth = bodyWorldPosition("earth");
     const bodyName = BODY_FOR_TARGET[target];
-    const body = bodyName ? bodyWorldPosition(bodyName) : null;
-    if (earth && body) {
-      return body.distanceTo(earth);
+    if (bodyName) {
+      const radius = geocentricBodyOrbitRadiusAu(bodyName, snapshot, bodyWorldPosition);
+      if (radius !== null && radius > 0) {
+        return radius;
+      }
     }
   }
 

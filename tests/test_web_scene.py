@@ -21,6 +21,7 @@ def test_scene_snapshot_json_serializable() -> None:
     path_names = {path["name"] for path in payload["paths"]}
     assert "earth_orbit" in path_names
     assert "moon_orbit" in path_names
+    assert "iss_orbit" not in path_names
 
 
 def test_moon_orbit_loops_near_earth() -> None:
@@ -38,6 +39,23 @@ def test_moon_orbit_loops_near_earth() -> None:
     assert 0.002 < mean_distance < 0.003
     moon_on_orbit = float(np.min(np.linalg.norm(orbit_points - moon_position, axis=1)))
     assert moon_on_orbit < 1e-6
+
+
+def test_iss_orbit_loops_near_earth() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.ISS)
+    earth = next(body for body in payload["bodies"] if body["name"] == "earth")
+    iss = next(body for body in payload["bodies"] if body["name"] == "iss")
+    iss_orbit = next(path for path in payload["paths"] if path["name"] == "iss_orbit")
+    earth_position = np.array(earth["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    iss_position = np.array(iss["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    segment = iss_orbit["segments"][0]
+    orbit_points = np.array(segment, dtype=float)
+    distances_from_earth = np.linalg.norm(orbit_points - earth_position, axis=1)
+    mean_distance = float(np.mean(distances_from_earth))
+    assert 0.00004 < mean_distance < 0.0002
+    iss_on_orbit = float(np.min(np.linalg.norm(orbit_points - iss_position, axis=1)))
+    assert iss_on_orbit < 1e-6
 
 
 def test_scene_snapshot_follows_pointing_target() -> None:

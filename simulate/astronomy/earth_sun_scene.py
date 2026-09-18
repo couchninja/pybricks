@@ -5,7 +5,7 @@ Scene graph:
     earth_center
       milky_way
         solar_system
-          sun, earth, moon, iss, observer, earth_orbit, moon_orbit, year_boundaries, earth_axis
+          sun, earth, moon, iss, observer, earth_orbit, moon_orbit, iss_orbit, year_boundaries, earth_axis
         galactic_center, galactic_orbit, galactic_axis, cmb_dipole_arrow
 
 The graph stacks two independent concerns:
@@ -56,6 +56,8 @@ from simulate.astronomy.constants import (
     GALACTIC_ORBIT_DISTANCE_SCALE,
     ISS_COLOR,
     ISS_MARKER_EARTH_RADII,
+    ISS_ORBIT_COLOR,
+    ISS_ORBIT_SEGMENTS,
     KPC_TO_AU,
     MILKY_WAY_FRAME,
     MOON_COLOR,
@@ -89,6 +91,7 @@ from simulate.astronomy.utils.ephemeris import (
     earth_year_boundary_positions_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
     iss_heliocentric_ecliptic_au,
+    iss_orbit_ecliptic_au,
     milky_way_cmb_direction_galactocentric,
     moon_heliocentric_ecliptic_au,
     moon_orbit_ecliptic_au,
@@ -225,6 +228,7 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
         ("galactic_axis", GALACTIC_AXIS_COLOR),
         ("earth_orbit", EARTH_ORBIT_COLOR),
         ("moon_orbit", MOON_ORBIT_COLOR),
+        ("iss_orbit", ISS_ORBIT_COLOR),
         ("year_boundaries", YEAR_BOUNDARY_COLOR),
         ("earth_axis", AXIS_COLOR),
     ):
@@ -309,6 +313,14 @@ def update_earth_sun_scene(
         moon_orbit_ecliptic_au(time, samples=MOON_ORBIT_SEGMENTS),
         MOON_ORBIT_COLOR,
     )
+    pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
+    if pointing_target == PointingTarget.ISS:
+        scene.geometry["iss_orbit"] = _colored_path(
+            iss_orbit_ecliptic_au(time, samples=ISS_ORBIT_SEGMENTS),
+            ISS_ORBIT_COLOR,
+        )
+    else:
+        scene.geometry["iss_orbit"] = _placeholder_path(ISS_ORBIT_COLOR)
 
     if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
         scene.geometry["earth_orbit"] = _colored_path(

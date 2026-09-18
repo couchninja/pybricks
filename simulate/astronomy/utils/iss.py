@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 import numpy as np
+from astropy import units as u
 from astropy.time import Time
 from skyfield.api import EarthSatellite, load
 from skyfield.timelib import Time as SkyfieldTime
@@ -34,6 +35,14 @@ def _iss_satellite_or_raise() -> EarthSatellite:
     if _iss_satellite is None:
         raise RuntimeError("ISS satellite is not initialized")
     return _iss_satellite
+
+
+def iss_orbital_period(time: Time) -> u.Quantity:
+    """Sidereal orbital period from the active TLE mean motion."""
+    _ = time
+    mean_motion_rad_per_min = _iss_satellite_or_raise().model.no_kozai
+    period_min = (2.0 * np.pi / mean_motion_rad_per_min) * u.min
+    return period_min.to(u.s)
 
 
 def iss_geocentric_gcrs_km(time: Time) -> np.ndarray:

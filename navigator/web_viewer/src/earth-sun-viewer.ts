@@ -5,6 +5,7 @@ import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRe
 import {
   cameraPoseFromState,
   desiredOrbitTargetCameraPose,
+  heavenlyBodyOrbitRadiusAu,
 } from "./camera-orbit-framing";
 import {
   cameraOrbitTweenActive,
@@ -28,6 +29,9 @@ const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
 
 
 const LABEL_OFFSET_BODY_RADII = 2.5;
+const _labelWorldCenter = new THREE.Vector3();
+const _labelWorldAnchor = new THREE.Vector3();
+const _cameraScreenDown = new THREE.Vector3();
 const SELF_LIT_BODY_EMISSIVE_INTENSITY: Partial<Record<string, number>> = {
   sun: 0.65,
   observer: 0.45,
@@ -228,6 +232,7 @@ export class EarthSunViewer {
   private lastPointingTarget: string | null = null;
   private cameraOrbitTween: CameraOrbitTweenHandle | null = null;
   private cameraOrbitTweenUntil = 0;
+  private sceneSnapshot: SceneSnapshot | null = null;
 
   constructor(mount: HTMLElement) {
     this.root = document.createElement("div");
@@ -271,6 +276,8 @@ export class EarthSunViewer {
       this.clampCameraDistance();
       this.syncClipPlanes();
       this.layoutArrows();
+      this.updateLabels();
+      this.labelRenderer.render(this.scene, this.camera);
     });
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.12);
@@ -298,6 +305,7 @@ export class EarthSunViewer {
   }
 
   applySnapshot(snapshot: SceneSnapshot): void {
+    this.sceneSnapshot = snapshot;
     this.defaultCameraDistance = snapshot.default_camera_distance_au;
     this.earthRadiusAu = snapshot.earth_radius_au;
     this.earthOrbitRadiusAu = snapshot.earth_orbit_radius_au;
@@ -545,6 +553,8 @@ export class EarthSunViewer {
   }
 
   private updateLabels(): void {
+    this.scene.updateMatrixWorld(true);
+    _cameraScreenDown.set(0, -1, 0).applyQuaternion(this.camera.quaternion);
     const hideWhenBehind = (label: CSS2DObject, visibleOpacity = 1): void => {
       const world = new THREE.Vector3();
       label.getWorldPosition(world);
@@ -552,12 +562,44 @@ export class EarthSunViewer {
       const behind = projected.z < -1 || projected.z > 1;
       label.element.style.opacity = behind ? "0" : String(visibleOpacity);
     };
+    const bodyWorldPosition = (name: string): THREE.Vector3 | null => {
+      const bodyEntry = this.bodies.get(name);
+      if (!bodyEntry) {
+        return null;
+      }
+      bodyEntry.root.getWorldPosition(_labelWorldAnchor);
+      return _labelWorldAnchor;
+    };
     for (const entry of this.bodies.values()) {
       const label = entry.label;
       if (!label) {
         continue;
       }
-      hideWhenBehind(label);
+      entry.root.getWorldPosition(_labelWorldCenter);
+      let labelOpacity = 1;
+      const bodyName = entry.root.name;
+      if (bodyName !== "earth" && this.sceneSnapshot) {
+        const orbitRadius = heavenlyBodyOrbitRadiusAu(
+          bodyName,
+          this.sceneSnapshot,
+          bodyWorldPosition,
+        );
+        if (orbitRadius !== null && orbitRadius > 0) {
+          const cameraDistance = this.camera.position.distanceTo(_labelWorldCenter);
+          labelOpacity = skyOpacityForCameraDistance(
+            cameraDistance,
+            orbitRadius,
+            this.skyboxFadeOrbitMultiple,
+            this.skyboxFadeSpanOrbitMultiple,
+          );
+        }
+      }
+      _labelWorldAnchor
+        .copy(_labelWorldCenter)
+        .addScaledVector(_cameraScreenDown, entry.radius * LABEL_OFFSET_BODY_RADII);
+      entry.root.worldToLocal(_labelWorldAnchor);
+      label.position.copy(_labelWorldAnchor);
+      hideWhenBehind(label, labelOpacity);
     }
     for (const label of this.constellationSky.labels) {
       hideWhenBehind(label, this.skyOpacity);
@@ -594,6 +636,8 @@ export class EarthSunViewer {
     if (!cameraOrbitTweenActive()) {
       this.controls.update();
     }
+    this.updateLabels();
+    this.labelRenderer.render(this.scene, this.camera);
     const now = performance.now();
     if (now - this.lastRenderTime < this.renderIntervalMs(now)) {
       return;
@@ -601,9 +645,7 @@ export class EarthSunViewer {
     this.lastRenderTime = now;
     this.layoutArrows();
     this.syncClipPlanes();
-    this.updateLabels();
     this.renderer.render(this.scene, this.camera);
-    this.labelRenderer.render(this.scene, this.camera);
     this.updateFps();
   };
 

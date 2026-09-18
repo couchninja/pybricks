@@ -49,6 +49,7 @@ _BODY_NODES: tuple[tuple[str, str], ...] = (
 _PATH_NODES: tuple[str, ...] = (
     "earth_orbit",
     "moon_orbit",
+    "iss_orbit",
     "year_boundaries",
     "galactic_orbit",
     "earth_axis",
@@ -150,7 +151,11 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
         ),
         "milky_way_diameter_au": _milky_way_diameter_au(scene),
         "bodies": [_serialize_body(scene, node, label) for node, label in _BODY_NODES],
-        "paths": [_serialize_path(scene, node) for node in _PATH_NODES],
+        "paths": [
+            _serialize_path(scene, node)
+            for node in _PATH_NODES
+            if node != "iss_orbit" or pointing_target == PointingTarget.ISS
+        ],
         "arrows": [_serialize_arrow(scene, node) for node in _ARROW_NODES],
     }
 
