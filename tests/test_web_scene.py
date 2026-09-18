@@ -91,6 +91,54 @@ def test_moon_orbit_loops_near_earth() -> None:
     assert moon_on_orbit < 1e-6
 
 
+def test_iss_stays_on_orbit_path_between_rebuilds() -> None:
+    from astropy.time import Time
+
+    from simulate.astronomy.constants import CAMERA_DISTANCE_EARTH_RADII, EARTH_RADIUS_AU, ROOT_FRAME
+    from simulate.astronomy.earth_sun_scene import build_earth_sun_scene, update_earth_sun_scene
+    from simulate.astronomy.simulation_clock import set_time_scale_preset
+
+    set_time_scale_preset("realtime")
+    reset_web_scene_cache()
+    time = Time("2026-06-15T12:00:00", scale="utc")
+    scene = build_earth_sun_scene(time)
+    scene.metadata["pointing_target"] = PointingTarget.ISS
+    camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
+    last_orbit, last_moon, last_iss = update_earth_sun_scene(
+        scene,
+        time,
+        None,
+        camera_distance,
+        last_moon_orbit_time=None,
+        last_iss_orbit_time=None,
+    )
+    for minutes in range(1, 16):
+        t = time + minutes * u.minute
+        last_orbit, last_moon, last_iss = update_earth_sun_scene(
+            scene,
+            t,
+            last_orbit,
+            camera_distance,
+            last_moon_orbit_time=last_moon,
+            last_iss_orbit_time=last_iss,
+        )
+        iss_transform, _ = scene.graph.get("iss", ROOT_FRAME)
+        iss = iss_transform[:3, 3]
+        orbit_transform, orbit_geometry_name = scene.graph.get("iss_orbit", ROOT_FRAME)
+        orbit = scene.geometry[orbit_geometry_name]
+        orbit_points = transform_points(orbit.vertices[orbit.entities[0].points], orbit_transform)
+        iss_on_orbit = float(np.min(np.linalg.norm(orbit_points - iss, axis=1)))
+        assert iss_on_orbit < 1e-5, f"minute offset {minutes}"
+
+
+def test_iss_orbit_omitted_when_not_pointing_at_iss() -> None:
+    reset_web_scene_cache()
+    scene_snapshot_payload(PointingTarget.ISS)
+    payload = scene_snapshot_payload(PointingTarget.MOON)
+    path_names = {path["name"] for path in payload["paths"]}
+    assert "iss_orbit" not in path_names
+
+
 def test_iss_orbit_loops_near_earth() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.ISS)
@@ -99,10 +147,9 @@ def test_iss_orbit_loops_near_earth() -> None:
     iss_orbit = next(path for path in payload["paths"] if path["name"] == "iss_orbit")
     earth_position = np.array(earth["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
     iss_position = np.array(iss["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
+    geocentric_distance = float(np.linalg.norm(iss_position - earth_position))
+    assert 0.00004 < geocentric_distance < 0.0002
     orbit_points = _path_world_segment(iss_orbit)
-    distances_from_earth = np.linalg.norm(orbit_points - earth_position, axis=1)
-    mean_distance = float(np.mean(distances_from_earth))
-    assert 0.00004 < mean_distance < 0.0002
     iss_on_orbit = float(np.min(np.linalg.norm(orbit_points - iss_position, axis=1)))
     assert iss_on_orbit < 1e-6
 

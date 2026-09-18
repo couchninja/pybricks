@@ -45,6 +45,7 @@ from simulate.astronomy.constants import (
     CMB_DIPOLE_ARROW_COLOR,
     EARTH_CENTER_FRAME,
     EARTH_ORBIT_COLOR,
+    EARTH_ORBIT_RADIUS_AU,
     EARTH_ORBIT_SEGMENTS,
     EARTH_RADIUS_AU,
     GALACTIC_AXIS_COLOR,
@@ -79,6 +80,7 @@ from simulate.astronomy.constants import (
     SUN_COLOR,
     SUN_RADIUS_AU,
     YEAR_BOUNDARY_COLOR,
+    YEAR_BOUNDARY_HALF_LENGTH_ORBIT_FRACTION,
     PointingTarget,
 )
 from simulate.astronomy.simulation_clock import time_scaling
@@ -90,10 +92,10 @@ from simulate.astronomy.utils.ephemeris import (
     earth_orbit_ecliptic_au,
     earth_orientation_matrix,
     earth_spin_axis_ecliptic,
-    earth_year_boundary_positions_ecliptic_au,
+    earth_year_boundary_tick_segments_ecliptic_au,
     ecliptic_to_galactocentric_rotation,
+    iss_geocentric_orbit_ecliptic_au,
     iss_heliocentric_ecliptic_au,
-    iss_orbit_ecliptic_au,
     milky_way_cmb_direction_galactocentric,
     moon_heliocentric_ecliptic_au,
     moon_orbit_ecliptic_au,
@@ -334,11 +336,16 @@ def update_earth_sun_scene(
         iss_orbit_interval = _scaled_orbit_geometry_interval(iss_period, ISS_ORBIT_SEGMENTS)
         if last_iss_orbit_time is None or abs(time - last_iss_orbit_time) >= iss_orbit_interval:
             scene.geometry["iss_orbit"] = _colored_path(
-                iss_orbit_ecliptic_au(time, samples=ISS_ORBIT_SEGMENTS),
+                iss_geocentric_orbit_ecliptic_au(time, samples=ISS_ORBIT_SEGMENTS),
                 ISS_ORBIT_COLOR,
             )
             scene.metadata["iss_orbit_is_placeholder"] = False
             last_iss_orbit_time = time
+        scene.graph.update(
+            "iss_orbit",
+            SOLAR_SYSTEM_FRAME,
+            matrix=_transform_matrix(np.eye(3), state["earth_position"]),
+        )
     elif scene.metadata.get("iss_orbit_is_placeholder") is not True:
         scene.geometry["iss_orbit"] = _placeholder_path(ISS_ORBIT_COLOR)
         scene.metadata["iss_orbit_is_placeholder"] = True
@@ -554,16 +561,14 @@ def _segment_path(start: np.ndarray, end: np.ndarray, color: list[int]) -> trime
 
 
 def _year_boundary_path(time: Time) -> trimesh.path.Path3D:
-    positions = earth_year_boundary_positions_ecliptic_au(time)
-    if len(positions) == 0:
-        # earth_year_boundary_positions_ecliptic_au can return no Jan 1 in the
+    half_length = EARTH_ORBIT_RADIUS_AU * YEAR_BOUNDARY_HALF_LENGTH_ORBIT_FRACTION
+    segments = earth_year_boundary_tick_segments_ecliptic_au(time, half_length)
+    if len(segments) == 0:
+        # earth_year_boundary_tick_segments_ecliptic_au can return no Jan 1 in the
         # ±0.5 Julian year window (see its docstring). Trimesh's Scene.scale/bounds
         # computation assumes geometry bounds exist, so use a zero-length segment.
         return _placeholder_path(YEAR_BOUNDARY_COLOR)
-    return _colored_path(
-        np.array([[np.zeros(3, dtype=float), position] for position in positions]),
-        YEAR_BOUNDARY_COLOR,
-    )
+    return _colored_path(segments, YEAR_BOUNDARY_COLOR)
 
 
 def _transform_matrix(rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:

@@ -91,34 +91,37 @@ def moon_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
     return geocentric + earth_heliocentric_ecliptic_au(time)
 
 
-def iss_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
-    """Geocentric ISS track in heliocentric ecliptic coords, anchored at Earth's position at ``time``."""
+def iss_geocentric_orbit_ecliptic_au(time: Time, samples: int = 360) -> np.ndarray:
+    """Geocentric ecliptic ISS track for one orbital period centered on ``time``."""
     period = iss_orbital_period(time)
     times = time + np.linspace(-0.5, 0.5, samples, endpoint=False) * period
-    geocentric = np.array([iss_geocentric_ecliptic_au(t) for t in times])
-    return geocentric + earth_heliocentric_ecliptic_au(time)
+    return np.array([iss_geocentric_ecliptic_au(t) for t in times])
 
 
-def earth_year_boundary_positions_ecliptic_au(time: Time) -> np.ndarray:
-    """Earth positions at calendar Jan 1 dates within ±0.5 Julian years of ``time``.
+def earth_year_boundary_tick_segments_ecliptic_au(time: Time, half_length_au: float) -> np.ndarray:
+    """Short orbit ticks at calendar Jan 1 within ±0.5 Julian years of ``time``.
 
-    Returns one heliocentric ecliptic position (AU) per Jan 1 in
-    ``[time - 0.5 year, time + 0.5 year)``. Usually exactly one; occasionally
-    zero for a narrow band around mid-year. Julian years are 365.25 days while
-    calendar years are 365/366 days, so the half-open window can fall strictly
-    between two consecutive Jan 1 instants (both excluded by ``start <= boundary
-    < end``).
+    Each tick is a segment centered on Earth's heliocentric ecliptic position at
+    Jan 1, radial to the Sun (orthogonal to the orbit; ``half_length_au`` each side).
+
+    Usually exactly one tick; occasionally zero for a narrow band around mid-year.
+    Julian years are 365.25 days while calendar years are 365/366 days, so the
+    half-open window can fall strictly between two consecutive Jan 1 instants
+    (both excluded by ``start <= boundary < end``).
     """
     start = time - 0.5 * u.year
     end = time + 0.5 * u.year
     start_year = int(np.floor(start.decimalyear))
     end_year = int(np.ceil(end.decimalyear))
-    positions = []
+    segments = []
     for year in range(start_year, end_year + 1):
         boundary = Time(f"{year}-01-01", scale=time.scale, format="iso")
         if start <= boundary < end:
-            positions.append(earth_heliocentric_ecliptic_au(boundary))
-    return np.array(positions, dtype=float)
+            position = earth_heliocentric_ecliptic_au(boundary)
+            radial = position / np.linalg.norm(position)
+            offset = radial * half_length_au
+            segments.append([position - offset, position + offset])
+    return np.array(segments, dtype=float)
 
 
 def earth_heliocentric_ecliptic_au(time: Time) -> np.ndarray:
