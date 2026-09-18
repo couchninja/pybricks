@@ -9,6 +9,7 @@ import numpy as np
 import trimesh
 from astropy.time import Time
 from trimesh.transformations import transform_points
+from trimesh.visual.color import ColorVisuals
 
 from simulate.astronomy.constants import (
     CAMERA_DISTANCE_EARTH_RADII,
@@ -213,7 +214,10 @@ def _serialize_arrow(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
 
 
 def _mesh_color(mesh: trimesh.Trimesh) -> list[int]:
-    colors = mesh.visual.face_colors
+    visual = mesh.visual
+    if not isinstance(visual, ColorVisuals):
+        return [200, 200, 200]
+    colors = visual.face_colors
     if len(colors) == 0:
         return [200, 200, 200]
     channel = colors[0]

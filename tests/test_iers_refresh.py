@@ -1,15 +1,17 @@
 """IERS refresh via Astropy cache without hitting the network in tests."""
 
-import pytest
+from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
-from astropy.utils.iers import IERS_Auto, conf as iers_conf
+import pytest
+from astropy.utils.iers import IERS_Auto
+from astropy.utils.iers import conf as iers_conf
 
 from simulate.astronomy.utils import iers_refresh
 
 
 @pytest.fixture(autouse=True)
-def _restore_iers_table_after_test() -> None:
+def _restore_iers_table_after_test() -> Iterator[None]:
     yield
     IERS_Auto.iers_table = None
     iers_refresh.ensure_iers_table_loaded()

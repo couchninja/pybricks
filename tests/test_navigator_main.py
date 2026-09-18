@@ -1,6 +1,7 @@
 """Navigator pointing helpers without hardware."""
 
 from contextlib import nullcontext
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -53,9 +54,7 @@ def test_pointing_would_move_when_no_prior_angles() -> None:
 def test_pointing_would_move_false_when_within_delta() -> None:
     nav._last_target_angles.clear()
     target = PointingTarget.EARTH_ROTATION
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
-        current_time(), target
-    )
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(current_time(), target)
     yaw = nav.clamp_yaw(yaw)
     pitch = nav.clamp_pitch(pitch)
     nav._last_target_angles[Port.A.name] = yaw
@@ -67,9 +66,7 @@ def test_pointing_would_move_when_pan_drift_exceeds_delta() -> None:
     nav._last_target_angles.clear()
     target = PointingTarget.EARTH_ROTATION
     fixed = current_time()
-    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(
-        fixed, target
-    )
+    _surface, (yaw, pitch, _roll), _speed = observer_surface_vector_and_euler_angles_for_target(fixed, target)
     yaw = nav.clamp_yaw(yaw)
     pitch = nav.clamp_pitch(pitch)
     nav._last_target_angles[Port.A.name] = yaw - nav.MIN_TARGET_ANGLE_DELTA - 1.0
@@ -140,7 +137,7 @@ def test_clock_is_synchronized_matches_kernel_state() -> None:
 
 
 def test_clock_is_not_synchronized_when_kernel_reports_unsync() -> None:
-    def unsynced(timex_ref: object) -> int:
+    def unsynced(timex_ref: Any) -> int:
         timex_ref._obj.status = system_clock._STA_UNSYNC
         return system_clock._TIME_ERROR
 

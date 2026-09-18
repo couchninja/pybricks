@@ -107,7 +107,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e5/e0/050018d855d26d3c0b4a7d1b2ed692be758ce276d8289e2a2b44ba1014a5/pyerfa-2.0.1.5-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
@@ -195,7 +194,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/ef/d5bdb705c224dbc256aa0c1ec47bf4e61ec52558f2afb44a71a1fe4d7015/watchfiles-1.2.0-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e4/63/e08ed3a39be7f7818e2838f4ec4b03e80946f210312c4a9f321c5a9fbdbe/mpy_cross_v6-1.1.2-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl
       - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
@@ -276,7 +274,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/eb/07/ec2a3f0c91761581d4b7104a740791800025983f9a4dc4e73f91a99aeac4/numpy-2.5.1-cp313-cp313-macosx_10_13_x86_64.whl
@@ -359,7 +356,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f1/dc/892f9d1e7f3d48f11ba393ac14e73aad58f8f44724c7bb96ca24b2969b2e/mpy_cross_v5-1.1.2-py3-none-macosx_11_0_arm64.whl
@@ -437,7 +433,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/df/fb/cc3101430b7cb8155673ee4dd4b754232a62560c71bf47a4d28414565263/mpy_cross_v6-1.1.2-py3-none-win_amd64.whl
-      - pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/e5/a2/8ff66c749ab839f87db92f1ab4ec4c8457c9a35e6669fd0f1bf4dfc979d9/mpy_cross_v5-1.1.2-py3-none-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/ea/34/82aa9e3f950aa580f4bf22e68e3f46a4f40ca2731b68920105a367f24be5/pybricks-4.0.0-py3-none-any.whl
@@ -3223,10 +3218,6 @@ packages:
   version: 1.1.2
   sha256: 9a8b3079148eafa2a096d9a20140073f26a7c00234de2744e55a077b1033043c
   requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl
-  name: pyglet
-  version: 1.5.31
-  sha256: f68413564bbec380e4815898fef0fb7a4a494dc3f8718bfbf28ce2a802634c88
 - pypi: https://files.pythonhosted.org/packages/e3/37/5b71117e68e5571c8c10942600eb02fb8c454c7347d08f8cddbdcde6ba6e/reactivex-5.1.0-py3-none-any.whl
   name: reactivex
   version: 5.1.0

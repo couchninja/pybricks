@@ -6,7 +6,8 @@ import time
 from pathlib import Path
 
 from astropy.utils.data import download_file, is_url_in_cache
-from astropy.utils.iers import IERS_Auto, conf as iers_conf
+from astropy.utils.iers import IERS_Auto
+from astropy.utils.iers import conf as iers_conf
 
 IERS_REFRESH_INTERVAL_S = 3600.0
 

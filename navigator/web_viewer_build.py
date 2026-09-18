@@ -11,9 +11,7 @@ _WEB_VIEWER_DIR = Path(__file__).resolve().parent / "web_viewer"
 
 def build_web_viewer_if_ready() -> None:
     if shutil.which("npm") is None:
-        raise RuntimeError(
-            "npm not found on PATH; use pixi run (nodejs is a pixi dependency)"
-        )
+        raise RuntimeError("npm not found on PATH; use pixi run (nodejs is a pixi dependency)")
     if not (_WEB_VIEWER_DIR / "node_modules").is_dir():
         print("Installing navigator web viewer npm dependencies...")
         subprocess.run(

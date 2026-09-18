@@ -25,9 +25,7 @@ class IssTleNetworkUnavailable(Exception):
 
     def __init__(self, message: str, *, retry_after_s: float | None = None) -> None:
         super().__init__(message)
-        self.retry_after_s = (
-            retry_after_s if retry_after_s is not None else ISS_TLE_NETWORK_RETRY_INTERVAL_S
-        )
+        self.retry_after_s = retry_after_s if retry_after_s is not None else ISS_TLE_NETWORK_RETRY_INTERVAL_S
 
 
 def set_celestrak_fetch_allowed(allowed: bool) -> None:
