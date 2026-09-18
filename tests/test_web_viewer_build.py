@@ -1,9 +1,12 @@
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from navigator.web_viewer_build import build_web_viewer_if_ready
+
+_WEB_VIEWER_DIR = Path(__file__).resolve().parents[1] / "navigator" / "web_viewer"
 
 
 def test_build_raises_without_npm() -> None:
@@ -42,3 +45,7 @@ def test_build_runs_npm_when_ready(tmp_path: Path) -> None:
     run.assert_called_once()
     assert run.call_args.args[0] == ["npm", "run", "build"]
     assert run.call_args.kwargs["cwd"] == viewer_dir
+
+
+def test_flat_arrow_orientation() -> None:
+    subprocess.run(["npm", "test"], cwd=_WEB_VIEWER_DIR, check=True)
