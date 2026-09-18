@@ -5,9 +5,6 @@ import { BRIGHT_STARS, CONSTELLATION_LINE_SEGMENTS } from "./constellation-data"
 
 const J2000_OBLIQUITY_RAD = (23.4392911 * Math.PI) / 180;
 const SKY_FAR_FRACTION = 0.92;
-const BACKDROP_OPACITY = 1;
-const STARS_OPACITY = 0.92;
-const LINES_OPACITY = 0.42;
 
 /** J2000 equatorial centroids for named constellations (degrees). */
 const NAMED_CONSTELLATION_LABELS: readonly {
@@ -57,7 +54,6 @@ function buildStarPoints(radius: number): THREE.Points {
     size: starPointSize(2.5),
     sizeAttenuation: false,
     transparent: true,
-    opacity: STARS_OPACITY,
     depthWrite: false,
   });
   const points = new THREE.Points(geometry, material);
@@ -83,9 +79,8 @@ function buildConstellationLines(radius: number): THREE.LineSegments {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   const material = new THREE.LineBasicMaterial({
-    color: 0x5a7aa8,
+    color: 0x1e2838,
     transparent: true,
-    opacity: LINES_OPACITY,
     depthWrite: false,
   });
   const lines = new THREE.LineSegments(geometry, material);
@@ -216,9 +211,9 @@ export function createConstellationSky(initialRadius: number): ConstellationSky 
   const setOpacity = (opacity: number): void => {
     const clamped = Math.max(0, Math.min(1, opacity));
     backdropMaterial.transparent = clamped < 1;
-    backdropMaterial.opacity = BACKDROP_OPACITY * clamped;
-    starsMaterial.opacity = STARS_OPACITY * clamped;
-    linesMaterial.opacity = LINES_OPACITY * clamped;
+    backdropMaterial.opacity = clamped;
+    starsMaterial.opacity = clamped;
+    linesMaterial.opacity = clamped;
   };
 
   const setInertialToRootRotation = (values: number[] | undefined): void => {
