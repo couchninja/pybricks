@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from time import perf_counter
 from typing import Any
 
 import numpy as np
 import trimesh
 from astropy.time import Time
-from trimesh.transformations import transform_points
 from trimesh.visual.color import ColorVisuals
 
 from simulate.astronomy.constants import (
@@ -35,8 +33,6 @@ from simulate.astronomy.simulation_clock import (
 )
 from simulate.astronomy.utils.camera import camera_clip_planes
 from simulate.astronomy.utils.ephemeris import current_time, ecliptic_to_galactocentric_rotation
-from simulate.astronomy.utils.iss import refresh_iss_tle
-from simulate.astronomy.utils.iss_tle import ISS_TLE_REFRESH_INTERVAL_S
 
 _BODY_NODES: tuple[tuple[str, str], ...] = (
     ("sun", "Sun"),
@@ -88,7 +84,8 @@ def _ensure_scene() -> trimesh.Scene:
         start = simulation_time()
         scene.metadata["earth_sun_animation"] = EarthSunAnimationState(
             last_orbit_time=None,
-            last_iss_tle_refresh=perf_counter(),
+            last_moon_orbit_time=None,
+            last_iss_orbit_time=None,
             time_scaling=time_scaling(),
             current_time=start,
         )
@@ -100,21 +97,21 @@ def _ensure_scene() -> trimesh.Scene:
 
 def _advance_animation(scene: trimesh.Scene) -> None:
     animation = scene.metadata["earth_sun_animation"]
-    now = perf_counter()
-    last_iss_tle_refresh = animation["last_iss_tle_refresh"]
-    if last_iss_tle_refresh is None or now - last_iss_tle_refresh >= ISS_TLE_REFRESH_INTERVAL_S:
-        refresh_iss_tle()
-        animation["last_iss_tle_refresh"] = now
     time = simulation_time()
     animation["current_time"] = time
     animation["time_scaling"] = time_scaling()
     camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
-    animation["last_orbit_time"] = update_earth_sun_scene(
+    last_orbit_time, last_moon_orbit_time, last_iss_orbit_time = update_earth_sun_scene(
         scene,
         time,
         animation["last_orbit_time"],
         camera_distance,
+        last_moon_orbit_time=animation["last_moon_orbit_time"],
+        last_iss_orbit_time=animation["last_iss_orbit_time"],
     )
+    animation["last_orbit_time"] = last_orbit_time
+    animation["last_moon_orbit_time"] = last_moon_orbit_time
+    animation["last_iss_orbit_time"] = last_iss_orbit_time
 
 
 def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> dict[str, Any]:
@@ -173,12 +170,21 @@ def _serialize_body(scene: trimesh.Scene, node_name: str, label: str) -> dict[st
 def _serialize_path(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
     transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
     geometry = scene.geometry[geometry_name]
-    color = _path_color(geometry)
-    segments = _path_segments_world(geometry, transform)
+    path_cache = scene.metadata.setdefault("path_serialize_cache", {})
+    cached = path_cache.get(node_name)
+    geometry_key = id(geometry)
+    if cached is None or cached["geometry_key"] != geometry_key:
+        cached = {
+            "geometry_key": geometry_key,
+            "color": _path_color(geometry),
+            "segments": _path_segments_local(geometry),
+        }
+        path_cache[node_name] = cached
     return {
         "name": node_name,
-        "color": color,
-        "segments": segments,
+        "color": cached["color"],
+        "matrix": _matrix_to_three(transform),
+        "segments": cached["segments"],
     }
 
 
@@ -221,14 +227,13 @@ def _path_color(geometry: trimesh.path.Path3D) -> list[int]:
     return [int(channel[0]), int(channel[1]), int(channel[2])]
 
 
-def _path_segments_world(geometry: trimesh.path.Path3D, transform: np.ndarray) -> list[list[list[float]]]:
+def _path_segments_local(geometry: trimesh.path.Path3D) -> list[list[list[float]]]:
     segments: list[list[list[float]]] = []
     for entity in geometry.entities:
         points = geometry.vertices[entity.points]
         if len(points) < 2:
             continue
-        world = transform_points(points, transform)
-        segments.append(world.astype(float).tolist())
+        segments.append(points.astype(float).tolist())
     return segments
 
 
@@ -241,10 +246,11 @@ def _rotation_to_three(rotation: np.ndarray) -> list[float]:
 
 
 def _milky_way_diameter_au(scene: trimesh.Scene) -> float:
-    gc_transform, _ = scene.graph.get("galactic_center", ROOT_FRAME)
-    galactic_center = gc_transform[:3, 3]
-    orbit_transform, orbit_geometry_name = scene.graph.get("galactic_orbit", ROOT_FRAME)
-    orbit = scene.geometry[orbit_geometry_name]
-    orbit_world = transform_points(orbit.vertices, orbit_transform)
-    orbit_radius = float(np.max(np.linalg.norm(orbit_world - galactic_center, axis=1)))
-    return 2.0 * orbit_radius
+    cached = scene.metadata.get("milky_way_diameter_au")
+    if isinstance(cached, (int, float)):
+        return float(cached)
+    from simulate.astronomy.earth_sun_scene import _milky_way_diameter_au as compute_diameter
+
+    diameter = compute_diameter(scene)
+    scene.metadata["milky_way_diameter_au"] = diameter
+    return diameter

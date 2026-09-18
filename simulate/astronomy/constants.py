@@ -29,6 +29,8 @@ GALACTIC_ORBIT_DISTANCE_SCALE = 1e-7
 EARTH_ORBIT_SEGMENTS = 360 * 5
 MOON_ORBIT_SEGMENTS = 360
 MOON_SIDEREAL_ORBIT_PERIOD = 27.321661 * u.day
+# Minimum sim-time gap between geocentric orbit path rebuilds (see _scaled_orbit_geometry_interval).
+ORBIT_GEOMETRY_MIN_UPDATE_INTERVAL = 30 * u.second
 # Mean heliocentric orbital radius (AU); Earth's orbit in the scene uses true ephemeris scale.
 EARTH_ORBIT_RADIUS_AU = float((1 * u.au).to_value(u.au))
 # Web skybox fade: full opacity until start multiple; then fades over span multiple (both × orbit radius).

@@ -3,10 +3,18 @@ import json
 import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+from trimesh.transformations import transform_points
 
 from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import PointingTarget
 from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
+
+
+def _path_world_segment(path: dict) -> np.ndarray:
+    matrix = np.array(path["matrix"], dtype=float).reshape(4, 4).T
+    segment = path["segments"][0]
+    points = np.array(segment, dtype=float)
+    return transform_points(points, matrix)
 
 
 def test_scene_snapshot_json_serializable() -> None:
@@ -34,6 +42,39 @@ def test_cmb_dipole_arrow_only_when_pointing_at_cmb_dipole() -> None:
     assert "cmb_dipole_arrow" in arrow_names
 
 
+def test_moon_stays_on_orbit_path_at_high_time_scale() -> None:
+    from astropy.time import Time
+
+    from simulate.astronomy.constants import CAMERA_DISTANCE_EARTH_RADII, EARTH_RADIUS_AU, ROOT_FRAME
+    from simulate.astronomy.earth_sun_scene import build_earth_sun_scene, update_earth_sun_scene
+    from simulate.astronomy.simulation_clock import set_time_scale_preset
+
+    set_time_scale_preset("day")
+    reset_web_scene_cache()
+    time = Time("2026-06-15T12:00:00", scale="utc")
+    scene = build_earth_sun_scene(time)
+    camera_distance = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
+    last_moon = None
+    for day in range(3):
+        t = time + day * u.day
+        last_orbit, last_moon, last_iss = update_earth_sun_scene(
+            scene,
+            t,
+            None,
+            camera_distance,
+            last_moon_orbit_time=last_moon,
+            last_iss_orbit_time=None,
+        )
+        _ = last_orbit, last_iss
+        moon_transform, geometry_name = scene.graph.get("moon", ROOT_FRAME)
+        moon = moon_transform[:3, 3]
+        orbit_transform, orbit_geometry_name = scene.graph.get("moon_orbit", ROOT_FRAME)
+        orbit = scene.geometry[orbit_geometry_name]
+        orbit_points = transform_points(orbit.vertices[orbit.entities[0].points], orbit_transform)
+        moon_on_orbit = float(np.min(np.linalg.norm(orbit_points - moon, axis=1)))
+        assert moon_on_orbit < 1e-5, f"day offset {day}"
+
+
 def test_moon_orbit_loops_near_earth() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.MOON)
@@ -42,8 +83,7 @@ def test_moon_orbit_loops_near_earth() -> None:
     moon_orbit = next(path for path in payload["paths"] if path["name"] == "moon_orbit")
     earth_position = np.array(earth["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
     moon_position = np.array(moon["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
-    segment = moon_orbit["segments"][0]
-    orbit_points = np.array(segment, dtype=float)
+    orbit_points = _path_world_segment(moon_orbit)
     distances_from_earth = np.linalg.norm(orbit_points - earth_position, axis=1)
     mean_distance = float(np.mean(distances_from_earth))
     assert 0.002 < mean_distance < 0.003
@@ -59,8 +99,7 @@ def test_iss_orbit_loops_near_earth() -> None:
     iss_orbit = next(path for path in payload["paths"] if path["name"] == "iss_orbit")
     earth_position = np.array(earth["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
     iss_position = np.array(iss["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
-    segment = iss_orbit["segments"][0]
-    orbit_points = np.array(segment, dtype=float)
+    orbit_points = _path_world_segment(iss_orbit)
     distances_from_earth = np.linalg.norm(orbit_points - earth_position, axis=1)
     mean_distance = float(np.mean(distances_from_earth))
     assert 0.00004 < mean_distance < 0.0002

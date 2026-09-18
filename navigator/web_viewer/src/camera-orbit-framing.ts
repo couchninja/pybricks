@@ -64,10 +64,11 @@ export type OrbitCameraPose = {
 };
 
 function pathPoints(path: ScenePath): THREE.Vector3[] {
+  const matrix = new THREE.Matrix4().fromArray(path.matrix);
   const points: THREE.Vector3[] = [];
   for (const segment of path.segments) {
     for (const [x, y, z] of segment) {
-      points.push(new THREE.Vector3(x, y, z));
+      points.push(new THREE.Vector3(x, y, z).applyMatrix4(matrix));
     }
   }
   return points;
@@ -114,17 +115,13 @@ function meanPathRadius(path: ScenePath, center: THREE.Vector3): number | null {
   return sum / points.length;
 }
 
-function orbitPlaneNormal(
-  snapshot: SceneSnapshot,
-  currentOffsetDirection: THREE.Vector3,
-): THREE.Vector3 {
+function orbitPlaneNormal(snapshot: SceneSnapshot, currentOffsetDirection: THREE.Vector3): THREE.Vector3 {
   const pathName = POINTING_TARGET_ORBIT_PATH[framingPointingTarget(snapshot.pointing_target)];
   if (pathName) {
     const path = snapshot.paths.find((entry) => entry.name === pathName);
     if (path) {
       const points = pathPoints(path);
-      const axis =
-        pathName === "earth_axis" ? lineDirection(points) : newellPlaneNormal(points);
+      const axis = pathName === "earth_axis" ? lineDirection(points) : newellPlaneNormal(points);
       if (axis) {
         return axis.dot(currentOffsetDirection) >= 0 ? axis.clone() : axis.clone().negate();
       }
@@ -134,9 +131,7 @@ function orbitPlaneNormal(
   const velocityArrow = snapshot.arrows.find((entry) => entry.name === "observer_velocity_arrow");
   if (velocityArrow) {
     const direction = new THREE.Vector3(...velocityArrow.direction).normalize();
-    return direction.dot(currentOffsetDirection) >= 0
-      ? direction.clone()
-      : direction.clone().negate();
+    return direction.dot(currentOffsetDirection) >= 0 ? direction.clone() : direction.clone().negate();
   }
 
   return currentOffsetDirection.lengthSq() > 1e-20
@@ -144,11 +139,7 @@ function orbitPlaneNormal(
     : new THREE.Vector3(0, 0, 1);
 }
 
-function inPlaneHorizontal(
-  normal: THREE.Vector3,
-  observer: THREE.Vector3,
-  toward: THREE.Vector3,
-): THREE.Vector3 {
+function inPlaneHorizontal(normal: THREE.Vector3, observer: THREE.Vector3, toward: THREE.Vector3): THREE.Vector3 {
   const inPlane = toward.clone().sub(observer);
   inPlane.sub(normal.clone().multiplyScalar(inPlane.dot(normal)));
   if (inPlane.lengthSq() > 1e-16) {
@@ -178,26 +169,18 @@ function targetWorldPosition(
     const cmb = snapshot.arrows.find((entry) => entry.name === "cmb_dipole_arrow");
     if (cmb) {
       const extent = Math.max(snapshot.default_camera_distance_au, snapshot.scene_scale);
-      return new THREE.Vector3(...cmb.base).add(
-        new THREE.Vector3(...cmb.direction).multiplyScalar(extent),
-      );
+      return new THREE.Vector3(...cmb.base).add(new THREE.Vector3(...cmb.direction).multiplyScalar(extent));
     }
   }
   const velocityArrow = snapshot.arrows.find((entry) => entry.name === "observer_velocity_arrow");
   if (velocityArrow) {
     const extent = Math.max(snapshot.default_camera_distance_au, snapshot.scene_scale);
-    return observer
-      .clone()
-      .add(new THREE.Vector3(...velocityArrow.direction).multiplyScalar(extent));
+    return observer.clone().add(new THREE.Vector3(...velocityArrow.direction).multiplyScalar(extent));
   }
   return observer.clone().add(new THREE.Vector3(0, 0, snapshot.default_camera_distance_au));
 }
 
-function bodyPositionFromSnapshot(
-  snapshot: SceneSnapshot,
-  name: string,
-  target: THREE.Vector3,
-): boolean {
+function bodyPositionFromSnapshot(snapshot: SceneSnapshot, name: string, target: THREE.Vector3): boolean {
   const entry = snapshot.bodies.find((body) => body.name === name);
   if (!entry) {
     return false;
@@ -207,10 +190,7 @@ function bodyPositionFromSnapshot(
   return true;
 }
 
-function geocentricOrbitRadiusFromSnapshot(
-  bodyName: string,
-  snapshot: SceneSnapshot,
-): number | null {
+function geocentricOrbitRadiusFromSnapshot(bodyName: string, snapshot: SceneSnapshot): number | null {
   if (!bodyPositionFromSnapshot(snapshot, "earth", _heavenlyOrbitCenter)) {
     return null;
   }
@@ -281,10 +261,7 @@ export function heavenlyBodyOrbitRadiusAu(
   return snapshot.earth_orbit_radius_au;
 }
 
-function orbitRadiusAu(
-  snapshot: SceneSnapshot,
-  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
-): number {
+function orbitRadiusAu(snapshot: SceneSnapshot, bodyWorldPosition: (name: string) => THREE.Vector3 | null): number {
   const target = framingPointingTarget(snapshot.pointing_target);
 
   if (target === "moon" || target === "iss") {
@@ -406,10 +383,7 @@ export function desiredOrbitTargetCameraPose(
   };
 }
 
-export function cameraPoseFromState(
-  camera: THREE.PerspectiveCamera,
-  pivot: THREE.Vector3,
-): OrbitCameraPose {
+export function cameraPoseFromState(camera: THREE.PerspectiveCamera, pivot: THREE.Vector3): OrbitCameraPose {
   return {
     offset: camera.position.clone().sub(pivot),
     up: camera.up.clone().normalize(),

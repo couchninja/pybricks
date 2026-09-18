@@ -32,6 +32,7 @@ from typing import TypedDict
 
 import numpy as np
 import trimesh
+from astropy import units as u
 from astropy.time import Time
 from trimesh.visual.color import ColorVisuals
 
@@ -62,6 +63,7 @@ from simulate.astronomy.constants import (
     MOON_ORBIT_COLOR,
     MOON_ORBIT_SEGMENTS,
     MOON_RADIUS_AU,
+    MOON_SIDEREAL_ORBIT_PERIOD,
     OBSERVER_COLOR,
     OBSERVER_MARKER_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_HEAD_LENGTH_FRACTION,
@@ -70,6 +72,7 @@ from simulate.astronomy.constants import (
     OBSERVER_VELOCITY_ARROW_LENGTH_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_SHAFT_RADIUS_EARTH_RADII,
     OBSERVER_VELOCITY_ARROW_SHAFT_START_OBSERVER_RADIUS_MULTIPLE,
+    ORBIT_GEOMETRY_MIN_UPDATE_INTERVAL,
     ORBIT_UPDATE_INTERVAL,
     ROOT_FRAME,
     SOLAR_SYSTEM_FRAME,
@@ -78,6 +81,7 @@ from simulate.astronomy.constants import (
     YEAR_BOUNDARY_COLOR,
     PointingTarget,
 )
+from simulate.astronomy.simulation_clock import time_scaling
 from simulate.astronomy.utils.camera import camera_distance_to_point_au
 from simulate.astronomy.utils.earth_mesh import create_earth
 from simulate.astronomy.utils.ephemeris import (
@@ -98,12 +102,13 @@ from simulate.astronomy.utils.ephemeris import (
     sun_galactic_orbit_kpc,
     sun_galactocentric_kpc,
 )
-from simulate.astronomy.utils.iss import refresh_iss_tle
+from simulate.astronomy.utils.iss import iss_orbital_period, refresh_iss_tle
 
 
 class EarthSunAnimationState(TypedDict):
     last_orbit_time: Time | None
-    last_iss_tle_refresh: float | None
+    last_moon_orbit_time: Time | None
+    last_iss_orbit_time: Time | None
     time_scaling: float
     current_time: Time | None
 
@@ -233,7 +238,14 @@ def build_earth_sun_scene(time: Time | None = None) -> trimesh.Scene:
             else SOLAR_SYSTEM_FRAME,
         )
 
-    update_earth_sun_scene(scene, time, None, CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU)
+    update_earth_sun_scene(
+        scene,
+        time,
+        None,
+        CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU,
+        last_moon_orbit_time=None,
+        last_iss_orbit_time=None,
+    )
     _print_scene_graph(scene)
     return scene
 
@@ -243,7 +255,10 @@ def update_earth_sun_scene(
     time: Time,
     last_orbit_time: Time | None,
     camera_distance_au: float,
-) -> Time:
+    *,
+    last_moon_orbit_time: Time | None,
+    last_iss_orbit_time: Time | None,
+) -> tuple[Time | None, Time | None, Time | None]:
     state = _earth_sun_state(time)
     scene.graph.update(
         SOLAR_SYSTEM_FRAME,
@@ -305,18 +320,29 @@ def update_earth_sun_scene(
     )
     _sync_earth_center_frame(scene, state)
 
-    scene.geometry["moon_orbit"] = _colored_path(
-        moon_orbit_ecliptic_au(time, samples=MOON_ORBIT_SEGMENTS),
-        MOON_ORBIT_COLOR,
-    )
+    moon_orbit_interval = _scaled_orbit_geometry_interval(MOON_SIDEREAL_ORBIT_PERIOD, MOON_ORBIT_SEGMENTS)
+    if last_moon_orbit_time is None or abs(time - last_moon_orbit_time) >= moon_orbit_interval:
+        scene.geometry["moon_orbit"] = _colored_path(
+            moon_orbit_ecliptic_au(time, samples=MOON_ORBIT_SEGMENTS),
+            MOON_ORBIT_COLOR,
+        )
+        last_moon_orbit_time = time
+
     pointing_target = scene.metadata.get("pointing_target", PointingTarget.EARTH_ROTATION)
     if pointing_target == PointingTarget.ISS:
-        scene.geometry["iss_orbit"] = _colored_path(
-            iss_orbit_ecliptic_au(time, samples=ISS_ORBIT_SEGMENTS),
-            ISS_ORBIT_COLOR,
-        )
-    else:
+        iss_period = iss_orbital_period(time)
+        iss_orbit_interval = _scaled_orbit_geometry_interval(iss_period, ISS_ORBIT_SEGMENTS)
+        if last_iss_orbit_time is None or abs(time - last_iss_orbit_time) >= iss_orbit_interval:
+            scene.geometry["iss_orbit"] = _colored_path(
+                iss_orbit_ecliptic_au(time, samples=ISS_ORBIT_SEGMENTS),
+                ISS_ORBIT_COLOR,
+            )
+            scene.metadata["iss_orbit_is_placeholder"] = False
+            last_iss_orbit_time = time
+    elif scene.metadata.get("iss_orbit_is_placeholder") is not True:
         scene.geometry["iss_orbit"] = _placeholder_path(ISS_ORBIT_COLOR)
+        scene.metadata["iss_orbit_is_placeholder"] = True
+        last_iss_orbit_time = None
 
     if last_orbit_time is None or abs(time - last_orbit_time) >= ORBIT_UPDATE_INTERVAL:
         scene.geometry["earth_orbit"] = _colored_path(
@@ -332,9 +358,27 @@ def update_earth_sun_scene(
             trimesh.creation.icosphere(radius=state["galactic_center_radius_au"], subdivisions=3),
             GALACTIC_CENTER_COLOR,
         )
-        return time
+        scene.metadata["milky_way_diameter_au"] = _milky_way_diameter_au(scene)
+        last_orbit_time = time
 
-    return last_orbit_time
+    return last_orbit_time, last_moon_orbit_time, last_iss_orbit_time
+
+
+def _milky_way_diameter_au(scene: trimesh.Scene) -> float:
+    gc_transform, _ = scene.graph.get("galactic_center", ROOT_FRAME)
+    galactic_center = gc_transform[:3, 3]
+    orbit_transform, orbit_geometry_name = scene.graph.get("galactic_orbit", ROOT_FRAME)
+    orbit = scene.geometry[orbit_geometry_name]
+    orbit_world = trimesh.transformations.transform_points(orbit.vertices, orbit_transform)
+    orbit_radius = float(np.max(np.linalg.norm(orbit_world - galactic_center, axis=1)))
+    return 2.0 * orbit_radius
+
+
+def _scaled_orbit_geometry_interval(orbit_period: u.Quantity, segments: int) -> u.Quantity:
+    """Sim-time between orbit path rebuilds; shrinks at higher time scale so the body stays on the line."""
+    segment_time = orbit_period / segments
+    scaled = segment_time / max(time_scaling(), 1.0)
+    return scaled if scaled > ORBIT_GEOMETRY_MIN_UPDATE_INTERVAL else ORBIT_GEOMETRY_MIN_UPDATE_INTERVAL
 
 
 def _galactic_center_position(state: EarthSunState) -> np.ndarray:

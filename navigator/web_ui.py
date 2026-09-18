@@ -602,7 +602,8 @@ async def _handle_client(
             writer.write(_http_response(200, payload, "application/json"))
         elif route == "/api/scene" and method == "GET":
             target = buttons.selected_button["target"]
-            payload = json.dumps(scene_snapshot_payload(target)).encode("utf-8")
+            snapshot = await asyncio.to_thread(scene_snapshot_payload, target)
+            payload = json.dumps(snapshot).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json"))
         elif route == "/api/time-scale" and method == "GET":
             payload = json.dumps(time_scale_status_payload()).encode("utf-8")

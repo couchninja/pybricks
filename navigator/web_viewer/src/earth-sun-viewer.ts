@@ -5,11 +5,7 @@ import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRe
 
 import { createViewerOutlinePipeline, type ViewerOutlinePipeline } from "./viewer-outline-pipeline";
 
-import {
-  cameraPoseFromState,
-  desiredOrbitTargetCameraPose,
-  heavenlyBodyOrbitRadiusAu,
-} from "./camera-orbit-framing";
+import { cameraPoseFromState, desiredOrbitTargetCameraPose, heavenlyBodyOrbitRadiusAu } from "./camera-orbit-framing";
 import {
   cameraOrbitTweenActive,
   tweenCameraToOrbitPose,
@@ -18,18 +14,10 @@ import {
 } from "./camera-target-orbit";
 import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
 import { createEarthMesh } from "./earth-mesh";
-import type {
-  ArrowDistanceAnchor,
-  Rgb,
-  SceneArrow,
-  SceneBody,
-  ScenePath,
-  SceneSnapshot,
-} from "./scene-types";
+import type { ArrowDistanceAnchor, Rgb, SceneArrow, SceneBody, ScenePath, SceneSnapshot } from "./scene-types";
 
 const VIEWER_TARGET_FPS = 60;
 const VIEWER_FRAME_MS = 1000 / VIEWER_TARGET_FPS;
-
 
 const LABEL_OFFSET_BODY_RADII = 2.5;
 const _labelWorldCenter = new THREE.Vector3();
@@ -67,9 +55,7 @@ function createSphereMesh(radius: number, color: Rgb, emissiveIntensity = 0): TH
   const material = new THREE.MeshStandardMaterial({
     color: threeColor,
     roughness: 0.75,
-    ...(emissiveIntensity > 0
-      ? { emissive: threeColor.clone(), emissiveIntensity }
-      : {}),
+    ...(emissiveIntensity > 0 ? { emissive: threeColor.clone(), emissiveIntensity } : {}),
   });
   return new THREE.Mesh(geometry, material);
 }
@@ -224,7 +210,7 @@ type BodyEntry = {
 
 type PathEntry = {
   root: THREE.Object3D;
-  signature: string;
+  segmentSignature: string;
 };
 
 export class EarthSunViewer {
@@ -392,8 +378,7 @@ export class EarthSunViewer {
     this.syncClipPlanes();
     this.updateLabels();
     this.syncOrbitPivot();
-    const pointingTarget =
-      snapshot.pointing_target ?? snapshot.pointing_target_label ?? "";
+    const pointingTarget = snapshot.pointing_target ?? snapshot.pointing_target_label ?? "";
     const targetChanged =
       this.hasInitialCamera &&
       this.lastPointingTarget !== null &&
@@ -414,10 +399,7 @@ export class EarthSunViewer {
     if (!entry) {
       const root = new THREE.Object3D();
       root.name = body.name;
-      const label =
-        body.name === "observer"
-          ? null
-          : createLabel(body.label, BODY_LABEL_COLORS[body.name] ?? "white");
+      const label = body.name === "observer" ? null : createLabel(body.label, BODY_LABEL_COLORS[body.name] ?? "white");
       if (label) {
         root.add(label);
       }
@@ -436,11 +418,7 @@ export class EarthSunViewer {
       const mesh =
         body.name === "earth"
           ? createEarthMesh(body.radius)
-          : createSphereMesh(
-              body.radius,
-              body.color,
-              SELF_LIT_BODY_EMISSIVE_INTENSITY[body.name] ?? 0,
-            );
+          : createSphereMesh(body.radius, body.color, SELF_LIT_BODY_EMISSIVE_INTENSITY[body.name] ?? 0);
       entry.root.add(mesh);
       entry.radius = body.radius;
     }
@@ -457,9 +435,12 @@ export class EarthSunViewer {
   }
 
   private updatePath(path: ScenePath): void {
-    const signature = JSON.stringify(path.segments);
+    const segmentSignature = JSON.stringify(path.segments);
     const existing = this.paths.get(path.name);
-    if (existing?.signature === signature) {
+    if (existing?.segmentSignature === segmentSignature) {
+      existing.root.matrixAutoUpdate = false;
+      existing.root.matrix.copy(matrixFromSnapshot(path.matrix));
+      existing.root.matrixWorldNeedsUpdate = true;
       return;
     }
 
@@ -475,6 +456,8 @@ export class EarthSunViewer {
 
     const root = new THREE.Object3D();
     root.name = path.name;
+    root.matrixAutoUpdate = false;
+    root.matrix.copy(matrixFromSnapshot(path.matrix));
     for (const segment of path.segments) {
       if (segment.length < 2) {
         continue;
@@ -492,7 +475,7 @@ export class EarthSunViewer {
       root.add(new THREE.Line(geometry, material));
     }
     this.contentRoot.add(root);
-    this.paths.set(path.name, { root, signature });
+    this.paths.set(path.name, { root, segmentSignature });
   }
 
   private updateArrow(arrow: SceneArrow): void {
@@ -535,11 +518,7 @@ export class EarthSunViewer {
     if (!observer || observer.radius <= 0) {
       return 0;
     }
-    return observerArrowShaftStartAu(
-      observer.radius,
-      cameraDistanceAu,
-      this.defaultCameraDistance,
-    );
+    return observerArrowShaftStartAu(observer.radius, cameraDistanceAu, this.defaultCameraDistance);
   }
 
   private arrowWorldOrigin(frame: ArrowFrame, shaftStartAu: number): THREE.Vector3 {
@@ -565,11 +544,8 @@ export class EarthSunViewer {
       const displayLength = this.arrowDisplayLengthAu(cameraDistance);
       const lengthDelta = Math.abs(displayLength - frame.displayLengthAu);
       const gapDelta = Math.abs(shaftStartAu - frame.displayGapAu);
-      const rebuildLength =
-        lengthDelta > frame.displayLengthAu * 0.02 ||
-        lengthDelta > this.arrowMeshLengthAu * 0.02;
-      const repositionGap =
-        gapDelta > Math.max(frame.displayGapAu * 0.02, this.arrowEarthRadiusAu * 1e-4);
+      const rebuildLength = lengthDelta > frame.displayLengthAu * 0.02 || lengthDelta > this.arrowMeshLengthAu * 0.02;
+      const repositionGap = gapDelta > Math.max(frame.displayGapAu * 0.02, this.arrowEarthRadiusAu * 1e-4);
       const existing = this.arrows.get(name);
       if (!rebuildLength && !repositionGap && existing) {
         continue;
@@ -688,11 +664,7 @@ export class EarthSunViewer {
       let labelOpacity = 1;
       const bodyName = entry.root.name;
       if (bodyName !== "earth" && this.sceneSnapshot) {
-        const orbitRadius = heavenlyBodyOrbitRadiusAu(
-          bodyName,
-          this.sceneSnapshot,
-          bodyWorldPosition,
-        );
+        const orbitRadius = heavenlyBodyOrbitRadiusAu(bodyName, this.sceneSnapshot, bodyWorldPosition);
         if (orbitRadius !== null && orbitRadius > 0) {
           const cameraDistance = this.camera.position.distanceTo(_labelWorldCenter);
           labelOpacity = skyOpacityForCameraDistance(
@@ -777,7 +749,7 @@ export class EarthSunViewer {
     this.fpsFrames = 0;
     this.fpsIntervalStart = performance.now();
     this.fpsEl.textContent = `${this.fpsDisplay.toFixed(0)} FPS`;
-  };
+  }
 
   resetCamera(): void {
     const distance = this.defaultCameraDistance || 1;
@@ -814,18 +786,11 @@ export class EarthSunViewer {
       this.controls.maxDistance,
     );
     this.cameraOrbitTweenUntil = performance.now() + 1200;
-    this.cameraOrbitTween = tweenCameraToOrbitPose(
-      this.camera,
-      this.controls,
-      _orbitPivot,
-      startPose,
-      endPose,
-      () => {
-        this.cameraMotionUntil = performance.now() + 250;
-        this.clampCameraDistance();
-        this.syncClipPlanes();
-        this.layoutArrows();
-      },
-    );
+    this.cameraOrbitTween = tweenCameraToOrbitPose(this.camera, this.controls, _orbitPivot, startPose, endPose, () => {
+      this.cameraMotionUntil = performance.now() + 250;
+      this.clampCameraDistance();
+      this.syncClipPlanes();
+      this.layoutArrows();
+    });
   }
 }

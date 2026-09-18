@@ -11,6 +11,7 @@ export type SceneBody = {
 export type ScenePath = {
   name: string;
   color: Rgb;
+  matrix: number[];
   segments: number[][][];
 };
 

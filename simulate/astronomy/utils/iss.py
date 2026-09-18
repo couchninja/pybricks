@@ -31,9 +31,7 @@ def refresh_iss_tle() -> None:
 
 def _iss_satellite_or_raise() -> EarthSatellite:
     if _iss_satellite is None:
-        refresh_iss_tle()
-    if _iss_satellite is None:
-        raise RuntimeError("ISS satellite is not initialized")
+        raise RuntimeError("ISS satellite is not initialized; call refresh_iss_tle at startup")
     return _iss_satellite
 
 
