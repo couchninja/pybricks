@@ -13,6 +13,9 @@ from gpio.button_menu_host import HostButtonMenu
 
 if TYPE_CHECKING:
     from gpio.button_menu import ButtonMenu
+    from gpio.button_menu_host import HostButtonMenu
+
+    ButtonTargetSource = ButtonMenu | HostButtonMenu
 from navigator.system_clock import clock_is_synchronized
 from navigator.web_ui import LogBuffer, begin_navigator_session, capture_stdout, run_web_ui
 from navigator.web_viewer_build import build_web_viewer_if_ready
@@ -153,7 +156,7 @@ def resume_after_clock_sync() -> None:
     _last_target_angles.clear()
 
 
-async def wait_for_clock_sync_panel(buttons: ButtonMenu) -> None:
+async def wait_for_clock_sync_panel(buttons: ButtonTargetSource) -> None:
     async with buttons.panel_status() as status:
         status.hub = "ready"
         while not clock_is_synchronized():
@@ -162,7 +165,7 @@ async def wait_for_clock_sync_panel(buttons: ButtonMenu) -> None:
         status.clock_synchronized = True
 
 
-async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonMenu, program: str | None) -> MoveHub:
+async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonTargetSource, program: str | None) -> MoveHub:
     async with buttons.panel_status() as status:
         hub: MoveHub | None = None
         calibrated = False
@@ -191,7 +194,7 @@ async def connect_and_calibrate(hub_stack: AsyncExitStack, buttons: ButtonMenu, 
             return hub
 
 
-async def run_selection_loop(hub: MoveHub, buttons: ButtonMenu) -> None:
+async def run_selection_loop(hub: MoveHub, buttons: ButtonTargetSource) -> None:
     """Point at the selected target, then wait for the next press or a refresh.
 
     Pointing is suspended while the clock is unsynchronized, since every angle is
@@ -233,11 +236,24 @@ def gpio_available() -> bool:
     return sys.platform != "darwin"
 
 
-async def run_web_ui_only(buttons: HostButtonMenu, log_buffer: LogBuffer) -> None:
-    print("Navigator web UI (GPIO and hub disabled on macOS)")
-    refresh_astronomy_downloads(allow_network=True)
-    async with run_web_ui(buttons, log_buffer):
-        await asyncio.Event().wait()
+async def run_navigator_loop(buttons: ButtonTargetSource, log_buffer: LogBuffer, *, upload_program: bool) -> None:
+    refresh_astronomy_downloads(allow_network=False)
+    program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
+
+    async with AsyncExitStack() as outer_stack:
+        await outer_stack.enter_async_context(run_web_ui(buttons, log_buffer))
+        while True:
+            buttons.reset()
+            buttons.set_inputs_enabled(False)
+            try:
+                async with AsyncExitStack() as hub_stack:
+                    hub = await connect_and_calibrate(hub_stack, buttons, program)
+                    buttons.reset()
+                    buttons.set_inputs_enabled(True)
+                    await run_selection_loop(hub, buttons)
+            except RECOVERABLE_ERRORS as exc:
+                print(f"Hub lost ({format_error(exc)}); searching again...")
+                await asyncio.sleep(RECONNECT_DELAY_S)
 
 
 async def navigator_main(upload_program: bool = False) -> None:
@@ -246,31 +262,16 @@ async def navigator_main(upload_program: bool = False) -> None:
     print("Navigator main")
     log_buffer = LogBuffer()
 
-    if not gpio_available():
-        with HostButtonMenu() as buttons, capture_stdout(log_buffer):
-            await run_web_ui_only(buttons, log_buffer)
+    if gpio_available():
+        from gpio.button_menu import ButtonMenu
+
+        with ButtonMenu() as buttons, capture_stdout(log_buffer):
+            await run_navigator_loop(buttons, log_buffer, upload_program=upload_program)
         return
 
-    from gpio.button_menu import ButtonMenu
-
-    refresh_astronomy_downloads(allow_network=False)
-    program = "pybricks_hub/thin_ble_hub.py" if upload_program else None
-
-    with ButtonMenu() as buttons, capture_stdout(log_buffer):
-        async with AsyncExitStack() as outer_stack:
-            await outer_stack.enter_async_context(run_web_ui(buttons, log_buffer))
-            while True:
-                buttons.reset()
-                buttons.set_inputs_enabled(False)
-                try:
-                    async with AsyncExitStack() as hub_stack:
-                        hub = await connect_and_calibrate(hub_stack, buttons, program)
-                        buttons.reset()
-                        buttons.set_inputs_enabled(True)
-                        await run_selection_loop(hub, buttons)
-                except RECOVERABLE_ERRORS as exc:
-                    print(f"Hub lost ({format_error(exc)}); searching again...")
-                    await asyncio.sleep(RECONNECT_DELAY_S)
+    print("Navigator (GPIO disabled on macOS; using web UI for target selection)")
+    with HostButtonMenu() as buttons, capture_stdout(log_buffer):
+        await run_navigator_loop(buttons, log_buffer, upload_program=upload_program)
 
 
 if __name__ == "__main__":

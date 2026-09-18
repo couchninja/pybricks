@@ -13,10 +13,15 @@ def test_gpio_unavailable_on_darwin() -> None:
 
 
 @pytest.mark.asyncio
-async def test_navigator_main_runs_web_ui_only_on_darwin() -> None:
+async def test_navigator_main_uses_host_buttons_and_hub_loop_on_darwin() -> None:
     with (
         patch.object(nav.sys, "platform", "darwin"),
-        patch.object(nav, "run_web_ui_only", new=AsyncMock()) as web_only,
+        patch.object(nav, "build_web_viewer_if_ready"),
+        patch.object(nav, "begin_navigator_session"),
+        patch.object(nav, "run_navigator_loop", new=AsyncMock()) as hub_loop,
+        patch.object(nav, "HostButtonMenu") as host_menu_cls,
     ):
+        host_menu_cls.return_value.__enter__.return_value = object()
         await nav.navigator_main()
-    web_only.assert_awaited_once()
+    host_menu_cls.assert_called_once()
+    hub_loop.assert_awaited_once()
