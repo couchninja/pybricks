@@ -31,12 +31,7 @@ function offsetDirection(offset: THREE.Vector3, fallback: THREE.Vector3): THREE.
   return fallback.clone().normalize();
 }
 
-function slerpUnitDirection(
-  from: THREE.Vector3,
-  to: THREE.Vector3,
-  t: number,
-  target: THREE.Vector3,
-): THREE.Vector3 {
+function slerpUnitDirection(from: THREE.Vector3, to: THREE.Vector3, t: number, target: THREE.Vector3): THREE.Vector3 {
   const dot = THREE.MathUtils.clamp(from.dot(to), -1, 1);
   const omega = Math.acos(dot);
   if (omega < 1e-8) {

@@ -29,13 +29,7 @@ const ARROW_OUTLINE_EDGE_THICKNESS = 0.4;
 const BODY_OUTLINE_EDGE_STRENGTH = 1;
 const BODY_OUTLINE_EDGE_THICKNESS = 0.4;
 
-export const BODY_OUTLINE_NAMES = [
-  "earth",
-  "iss",
-  "moon",
-  "sun",
-  "galactic_center",
-] as const;
+export const BODY_OUTLINE_NAMES = ["earth", "iss", "moon", "sun", "galactic_center"] as const;
 
 export type ViewerOutlinePipeline = {
   renderPipeline: RenderPipeline;
@@ -58,11 +52,7 @@ function collectArrowOutlineMeshes(arrowGroups: Iterable<Group>): Mesh[] {
   return next;
 }
 
-function createOutlinePass(
-  scene: Scene,
-  camera: Camera,
-  edgeThickness: number,
-): OutlineNode {
+function createOutlinePass(scene: Scene, camera: Camera, edgeThickness: number): OutlineNode {
   return outline(scene, camera, {
     selectedObjects: [],
     edgeThickness: float(edgeThickness),
@@ -97,9 +87,7 @@ export function createViewerOutlinePipeline(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TSL node typing
   const arrowCoverage = arrowCoverageMask.coverageNode as any;
   const renderPipeline = new RenderPipeline(renderer);
-  renderPipeline.outputNode = scenePass
-    .add(bodyOutline.mul(arrowCoverage.oneMinus()))
-    .add(arrowOutline);
+  renderPipeline.outputNode = scenePass.add(bodyOutline.mul(arrowCoverage.oneMinus())).add(arrowOutline);
   renderPipeline.needsUpdate = true;
 
   const syncArrowOutline = (arrowGroups: Iterable<Group>): void => {

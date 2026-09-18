@@ -4,10 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
+    "prettier": "^3.5.3",
     "typescript": "^5.9.2",
     "vite": "^7.1.5"
   },

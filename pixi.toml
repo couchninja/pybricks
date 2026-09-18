@@ -9,6 +9,8 @@ env = { PYTHONPATH = "." }
 
 [tasks]
 web-viewer-build = { cmd = "npm run build", cwd = "navigator/web_viewer" }
+web-viewer-format = { cmd = "npm run format", cwd = "navigator/web_viewer" }
+web-viewer-format-check = { cmd = "npm run format:check", cwd = "navigator/web_viewer" }
 web-viewer-install = { cmd = "npm install", cwd = "navigator/web_viewer" }
 nav = "python -u navigator/navigator_main.py"
 nav-watch = "python -m watchfiles --ignore-paths navigator/web_viewer/dist,navigator/web_viewer/node_modules --grace-period 2 \"python -u navigator/navigator_main.py\" navigator/ gpio/ simulate/"

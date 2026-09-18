@@ -14,6 +14,10 @@
             "source.fixAll": "always",
         }
     },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+    },
     "python.languageServer": "None",
     // Disable Python extension's terminal auto-activation (we use pixi, not conda)
     // No longer needed on osx, test on nas

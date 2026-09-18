@@ -4,15 +4,7 @@
  */
 // @ts-nocheck
 import { Vector2 } from "three";
-import {
-  Mesh,
-  NodeMaterial,
-  Object3D,
-  RenderTarget,
-  Sprite,
-  SpriteNodeMaterial,
-  RendererUtils,
-} from "three/webgpu";
+import { Mesh, NodeMaterial, Object3D, RenderTarget, Sprite, SpriteNodeMaterial, RendererUtils } from "three/webgpu";
 import { color, screenUV, texture, saturate } from "three/tsl";
 
 const _size = /* @__PURE__ */ new Vector2();
@@ -83,22 +75,24 @@ export function createArrowCoverageMask(): ArrowCoverageMask {
     renderer.setClearColor(0x000000, 1);
     renderer.clear();
 
-    renderer.setRenderObjectFunction((object, renderScene, renderCamera, geometry, _material, group, lightsNode, clippingContext) => {
-      if (!selectionCache.has(object)) {
-        return;
-      }
-      const overrideMaterial = object instanceof Sprite ? arrowMaskSpriteMaterial : arrowMaskMaterial;
-      renderer.renderObject(
-        object,
-        renderScene,
-        renderCamera,
-        geometry,
-        overrideMaterial,
-        group,
-        lightsNode,
-        clippingContext,
-      );
-    });
+    renderer.setRenderObjectFunction(
+      (object, renderScene, renderCamera, geometry, _material, group, lightsNode, clippingContext) => {
+        if (!selectionCache.has(object)) {
+          return;
+        }
+        const overrideMaterial = object instanceof Sprite ? arrowMaskSpriteMaterial : arrowMaskMaterial;
+        renderer.renderObject(
+          object,
+          renderScene,
+          renderCamera,
+          geometry,
+          overrideMaterial,
+          group,
+          lightsNode,
+          clippingContext,
+        );
+      },
+    );
     renderer.render(scene, camera);
 
     renderer.setRenderObjectFunction(_rendererState.renderObjectFunction);

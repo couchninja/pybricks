@@ -21,6 +21,12 @@ jobs:
       - name: Ruff format
         run: pixi run ruff format --check
 
+      - name: Install web viewer npm dependencies
+        run: pixi run web-viewer-install
+
+      - name: Prettier (web viewer)
+        run: pixi run web-viewer-format-check
+
   ty:
     runs-on: ubuntu-latest
     steps:
