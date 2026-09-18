@@ -9,7 +9,7 @@ env = { PYTHONPATH = "." }
 
 [tasks]
 nav = "python -u navigator/navigator_main.py"
-nav-watch = "python -m watchfiles --ignore-paths navigator/web_viewer/dist,navigator/web_viewer/node_modules,navigator/web_viewer/.tsbuildinfo --grace-period 2 \"python -u navigator/navigator_main.py\" navigator/ gpio/ simulate/"
+nav-watch = "python -m watchfiles --filter navigator.nav_watch_filter.NavigatorWatchFilter --grace-period 2 \"python -u navigator/navigator_main.py\" navigator/ gpio/ simulate/"
 nav-service-autostart = "bash systemd/install-navigator-service.sh"
 nav-service-autostart-off = "bash systemd/uninstall-navigator-service.sh"
 nav-service-start = "systemctl --user start navigator"
