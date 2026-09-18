@@ -102,6 +102,23 @@ def test_panel_status_button_selection() -> None:
         assert menu._active_status_button_indices(PanelStatus(clock_synchronized=True, hub="ready")) == ()
 
 
+async def test_sun_button_from_other_button_resets_to_sun() -> None:
+    with fake_menu() as (menu, request):
+        menu.set_inputs_enabled(True)
+        for _ in range(2):
+            request.incoming.append(SUN_BUTTON_PIN)
+            await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.MOON
+
+        request.incoming.append(BUTTONS[1]["button_pin"])
+        await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.EARTH_ROTATION
+
+        request.incoming.append(SUN_BUTTON_PIN)
+        await menu.wait_for_selection(timeout_s=WAIT_TIMEOUT_S)
+        assert menu.selected_button["target"] == PointingTarget.SUN
+
+
 async def test_first_press_points_at_sun() -> None:
     with fake_menu() as (menu, request):
         menu.set_inputs_enabled(True)

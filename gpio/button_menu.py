@@ -144,7 +144,7 @@ class ButtonMenu:
         """Wait for a press or the timeout, discarding presses made before this call.
 
         A press on the selected button advances it to its next mode; a press on any
-        other button selects it.
+        other button selects it (the first button always returns to Sun).
         """
         request = self._require_request()
         await asyncio.to_thread(self._drain_edge_events)
@@ -191,6 +191,8 @@ class ButtonMenu:
             self._mode_indices[index] = (self._mode_indices[index] + 1) % len(modes)
         else:
             self._selected_index = index
+            if index == CLOCK_UNSYNC_BUTTON_INDEX:
+                self._mode_indices[index] = 0
         if not self._status_mode:
             self._show_selection()
 
