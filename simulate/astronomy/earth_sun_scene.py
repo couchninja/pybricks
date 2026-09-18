@@ -293,13 +293,17 @@ def update_earth_sun_scene(
             camera_distance_au,
         ),
     )
+    if pointing_target == PointingTarget.CMB_DIPOLE:
+        cmb_dipole_arrow_matrix = _cmb_dipole_arrow_transform(
+            time,
+            camera_distance_to_point_au(scene, _galactic_center_position(state)),
+        )
+    else:
+        cmb_dipole_arrow_matrix = _transform_matrix(np.diag([0.0, 0.0, 0.0]), np.zeros(3))
     scene.graph.update(
         "cmb_dipole_arrow",
         MILKY_WAY_FRAME,
-        matrix=_cmb_dipole_arrow_transform(
-            time,
-            camera_distance_to_point_au(scene, _galactic_center_position(state)),
-        ),
+        matrix=cmb_dipole_arrow_matrix,
     )
     scene.geometry["earth_axis"] = _earth_axis_path(state, camera_distance_au)
     scene.geometry["galactic_axis"] = _segment_path(

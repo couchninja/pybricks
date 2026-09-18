@@ -156,7 +156,11 @@ def _serialize_scene(scene: trimesh.Scene, pointing_target: PointingTarget) -> d
             for node in _PATH_NODES
             if node != "iss_orbit" or pointing_target == PointingTarget.ISS
         ],
-        "arrows": [_serialize_arrow(scene, node) for node in _ARROW_NODES],
+        "arrows": [
+            _serialize_arrow(scene, node)
+            for node in _ARROW_NODES
+            if node != "cmb_dipole_arrow" or pointing_target == PointingTarget.CMB_DIPOLE
+        ],
     }
 
 

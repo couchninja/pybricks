@@ -22,6 +22,16 @@ def test_scene_snapshot_json_serializable() -> None:
     assert "earth_orbit" in path_names
     assert "moon_orbit" in path_names
     assert "iss_orbit" not in path_names
+    arrow_names = {arrow["name"] for arrow in payload["arrows"]}
+    assert "observer_velocity_arrow" in arrow_names
+    assert "cmb_dipole_arrow" not in arrow_names
+
+
+def test_cmb_dipole_arrow_only_when_pointing_at_cmb_dipole() -> None:
+    reset_web_scene_cache()
+    payload = scene_snapshot_payload(PointingTarget.CMB_DIPOLE)
+    arrow_names = {arrow["name"] for arrow in payload["arrows"]}
+    assert "cmb_dipole_arrow" in arrow_names
 
 
 def test_moon_orbit_loops_near_earth() -> None:
