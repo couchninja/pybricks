@@ -7,6 +7,7 @@ from trimesh.transformations import transform_points
 
 from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import PointingTarget
+from simulate.astronomy.earth_sun_scene import pointing_arrow_name
 from simulate.astronomy.web_scene import reset_web_scene_cache, scene_snapshot_payload
 
 
@@ -32,14 +33,17 @@ def test_scene_snapshot_json_serializable() -> None:
     assert "moon_orbit" in path_names
     assert "iss_orbit" not in path_names
     arrow_names = {arrow["name"] for arrow in payload["arrows"]}
-    assert "observer_velocity_arrow" in arrow_names
-    assert "cmb_dipole_arrow" not in arrow_names
+    assert pointing_arrow_name(PointingTarget.EARTH_ROTATION) in arrow_names
+    assert "cmb_dipole_arrow" in arrow_names
+    assert len(arrow_names) == len(PointingTarget) + 1
 
 
-def test_cmb_dipole_arrow_only_when_pointing_at_cmb_dipole() -> None:
+def test_scene_snapshot_includes_all_pointing_arrows_regardless_of_target() -> None:
     reset_web_scene_cache()
-    payload = scene_snapshot_payload(PointingTarget.CMB_DIPOLE)
+    payload = scene_snapshot_payload(PointingTarget.MOON)
     arrow_names = {arrow["name"] for arrow in payload["arrows"]}
+    for target in PointingTarget:
+        assert pointing_arrow_name(target) in arrow_names
     assert "cmb_dipole_arrow" in arrow_names
 
 
@@ -158,7 +162,7 @@ def test_iss_orbit_loops_near_earth() -> None:
 def test_observer_arrow_color_matches_button_for_target() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.SUN)
-    observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
+    observer_arrow = next(a for a in payload["arrows"] if a["name"] == pointing_arrow_name(PointingTarget.SUN))
     expected = pointing_target_button_rgba(PointingTarget.SUN)
     assert observer_arrow["color"] == expected[:3]
 
@@ -209,10 +213,28 @@ def test_scene_snapshot_omits_viewer_static_metadata() -> None:
 def test_scene_snapshot_includes_observer_velocity_arrow_geometry() -> None:
     reset_web_scene_cache()
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
-    observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
+    observer_arrow = next(
+        a for a in payload["arrows"] if a["name"] == pointing_arrow_name(PointingTarget.EARTH_ROTATION)
+    )
     assert observer_arrow["distance_anchor"] == "observer"
     assert len(observer_arrow["base"]) == 3
     assert len(observer_arrow["direction"]) == 3
+
+
+def test_pointing_arrow_matches_trimesh_graph_in_root_frame() -> None:
+    from simulate.astronomy import web_scene
+    from simulate.astronomy.constants import ROOT_FRAME
+
+    reset_web_scene_cache()
+    target = PointingTarget.MOON
+    payload = scene_snapshot_payload(target)
+    scene = web_scene._ensure_scene()
+    graph_world, _ = scene.graph.get("observer_velocity_arrow", ROOT_FRAME)
+    payload_arrow = next(a for a in payload["arrows"] if a["name"] == pointing_arrow_name(target))
+    graph_direction = graph_world[:3, 2].astype(float)
+    graph_direction /= np.linalg.norm(graph_direction)
+    assert np.allclose(graph_direction, payload_arrow["direction"], atol=1e-6)
+    assert np.allclose(graph_world[:3, 3], payload_arrow["base"], atol=1e-6)
 
 
 def test_observer_velocity_arrow_shaft_starts_beyond_observer_marker() -> None:
@@ -221,7 +243,9 @@ def test_observer_velocity_arrow_shaft_starts_beyond_observer_marker() -> None:
 
     payload = scene_snapshot_payload(PointingTarget.EARTH_ROTATION)
     observer = next(body for body in payload["bodies"] if body["name"] == "observer")
-    observer_arrow = next(a for a in payload["arrows"] if a["name"] == "observer_velocity_arrow")
+    observer_arrow = next(
+        a for a in payload["arrows"] if a["name"] == pointing_arrow_name(PointingTarget.EARTH_ROTATION)
+    )
     observer_position = np.array(observer["matrix"], dtype=float).reshape(4, 4).T[:3, 3]
     arrow_base = np.array(observer_arrow["base"], dtype=float)
     gap = np.linalg.norm(arrow_base - observer_position)

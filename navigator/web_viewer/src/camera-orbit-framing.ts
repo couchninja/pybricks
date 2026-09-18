@@ -1,6 +1,7 @@
 import * as THREE from "three";
 
 import { orbitWorldPointsFromSnapshot, snapshotSimulationTimeMs, worldPointsFromScenePath } from "./orbit-path-samples";
+import { pointingArrowForTarget } from "./pointing-arrow";
 import { DEFAULT_CAMERA_DISTANCE_AU, EARTH_ORBIT_RADIUS_AU, EARTH_RADIUS_AU } from "./scene-viewer-constants";
 import type { ScenePath, SceneSnapshot } from "./scene-types";
 
@@ -140,7 +141,7 @@ function orbitPlaneNormal(
     }
   }
 
-  const velocityArrow = snapshot.arrows.find((entry) => entry.name === "observer_velocity_arrow");
+  const velocityArrow = pointingArrowForTarget(snapshot, pointingTarget);
   if (velocityArrow) {
     const direction = new THREE.Vector3(...velocityArrow.direction).normalize();
     return direction.dot(currentOffsetDirection) >= 0 ? direction.clone() : direction.clone().negate();
@@ -185,7 +186,7 @@ function targetWorldPosition(
       return new THREE.Vector3(...cmb.base).add(new THREE.Vector3(...cmb.direction).multiplyScalar(extent));
     }
   }
-  const velocityArrow = snapshot.arrows.find((entry) => entry.name === "observer_velocity_arrow");
+  const velocityArrow = pointingArrowForTarget(snapshot, pointingTarget);
   if (velocityArrow) {
     const extent = Math.max(DEFAULT_CAMERA_DISTANCE_AU, sceneScaleAuFromSnapshot(snapshot));
     return observer.clone().add(new THREE.Vector3(...velocityArrow.direction).multiplyScalar(extent));

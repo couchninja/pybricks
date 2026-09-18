@@ -8,15 +8,21 @@ import numpy as np
 import trimesh
 from trimesh.visual.color import ColorVisuals
 
+from gpio.button_config import pointing_target_button_rgba
 from simulate.astronomy.constants import (
     CAMERA_DISTANCE_EARTH_RADII,
+    CMB_DIPOLE_ARROW_COLOR,
     EARTH_RADIUS_AU,
     ROOT_FRAME,
+    SOLAR_SYSTEM_FRAME,
     PointingTarget,
 )
 from simulate.astronomy.earth_sun_scene import (
     EarthSunAnimationState,
     build_earth_sun_scene,
+    cmb_dipole_arrow_transform_in_root,
+    observer_pointing_arrow_transform,
+    pointing_arrow_name,
     update_earth_sun_scene,
 )
 from simulate.astronomy.parametric_orbits import parametric_orbit_payloads
@@ -45,11 +51,6 @@ _PATH_NODES: tuple[str, ...] = (
     "galactic_orbit",
     "earth_axis",
     "galactic_axis",
-)
-
-_ARROW_NODES: tuple[str, ...] = (
-    "observer_velocity_arrow",
-    "cmb_dipole_arrow",
 )
 
 _EPHEMERIS_ORBIT_PATHS = frozenset(
@@ -150,11 +151,7 @@ def _serialize_scene(
             if _include_path_in_snapshot(node, pointing_target, include_ephemeris_orbit_paths)
         ],
         "parametric_orbits": _serialize_parametric_orbits(scene, current, pointing_target),
-        "arrows": [
-            _serialize_arrow(scene, node)
-            for node in _ARROW_NODES
-            if node != "cmb_dipole_arrow" or pointing_target == PointingTarget.CMB_DIPOLE
-        ],
+        "arrows": _serialize_arrows(scene, current),
     }
 
 
@@ -210,10 +207,47 @@ def _serialize_path(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
     }
 
 
-def _serialize_arrow(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
-    transform, geometry_name = scene.graph.get(node_name, ROOT_FRAME)
-    mesh = scene.geometry[geometry_name]
-    color = _mesh_color(mesh)
+def _serialize_arrows(scene: trimesh.Scene, time: Any) -> list[dict[str, Any]]:
+    camera_distance_au = CAMERA_DISTANCE_EARTH_RADII * EARTH_RADIUS_AU
+    solar_transform, _ = scene.graph.get(SOLAR_SYSTEM_FRAME, ROOT_FRAME)
+    observer_local, _ = scene.graph.get("observer", SOLAR_SYSTEM_FRAME)
+    observer_position = observer_local[:3, 3]
+    arrows: list[dict[str, Any]] = []
+    for target in PointingTarget:
+        local_matrix = observer_pointing_arrow_transform(
+            observer_position,
+            time,
+            target,
+            camera_distance_au,
+        )
+        matrix = solar_transform @ local_matrix
+        color = pointing_target_button_rgba(target)[:3]
+        arrows.append(
+            _arrow_dict_from_transform(
+                matrix,
+                pointing_arrow_name(target),
+                color,
+                "observer",
+            ),
+        )
+    cmb_matrix = cmb_dipole_arrow_transform_in_root(scene, time)
+    arrows.append(
+        _arrow_dict_from_transform(
+            cmb_matrix,
+            "cmb_dipole_arrow",
+            CMB_DIPOLE_ARROW_COLOR[:3],
+            "galactic_center",
+        ),
+    )
+    return arrows
+
+
+def _arrow_dict_from_transform(
+    transform: np.ndarray,
+    name: str,
+    color: list[int],
+    distance_anchor: str,
+) -> dict[str, Any]:
     base = transform[:3, 3]
     z_axis = transform[:3, 2]
     z_length = float(np.linalg.norm(z_axis))
@@ -221,9 +255,8 @@ def _serialize_arrow(scene: trimesh.Scene, node_name: str) -> dict[str, Any]:
         direction = (z_axis / z_length).astype(float)
     else:
         direction = np.array([0.0, 0.0, 1.0], dtype=float)
-    distance_anchor = "galactic_center" if node_name == "cmb_dipole_arrow" else "observer"
     return {
-        "name": node_name,
+        "name": name,
         "color": color,
         "base": base.astype(float).tolist(),
         "direction": direction.tolist(),

@@ -29,6 +29,7 @@ import {
 } from "./camera-target-orbit";
 import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
 import { createFlatArrowGroup, disposeFlatArrowGroup, orientFlatArrow } from "./billboard-arrow";
+import { isPointingArrowName, pointingArrowName } from "./pointing-arrow";
 import { createEarthMesh } from "./earth-mesh";
 import { sampleKeplerianOrbitPoints, type KeplerianOrbitParams } from "./keplerian-orbit";
 import { heliocentricOriginForParametricOrbit, parametricOrbitSampleCount } from "./orbit-path-samples";
@@ -337,6 +338,7 @@ export class EarthSunViewer {
       status.target !== this.lastPointingTarget;
     this.pointingTarget = status.target;
     this.lastPointingTarget = status.target;
+    this.syncArrowVisibility();
     if (targetChanged) {
       this.pendingPointingTargetCamera = true;
     }
@@ -704,7 +706,21 @@ export class EarthSunViewer {
       }
       orientFlatArrow(arrow, origin, frame.direction, this.camera);
     }
+    this.syncArrowVisibility();
     this.syncOutlineSelection();
+  }
+
+  private syncArrowVisibility(): void {
+    const activePointing = this.pointingTarget ? pointingArrowName(this.pointingTarget) : "";
+    for (const [name, group] of this.arrows) {
+      if (name === "cmb_dipole_arrow") {
+        group.visible = this.pointingTarget === "cmb_dipole";
+      } else if (isPointingArrowName(name)) {
+        group.visible = name === activePointing;
+      } else {
+        group.visible = true;
+      }
+    }
   }
 
   private syncOutlineSelection(): void {

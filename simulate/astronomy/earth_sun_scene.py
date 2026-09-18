@@ -371,6 +371,32 @@ def update_earth_sun_scene(
     return last_orbit_time, last_moon_orbit_time, last_iss_orbit_time
 
 
+def pointing_arrow_name(target: PointingTarget) -> str:
+    return f"pointing_arrow_{target.value}"
+
+
+def observer_pointing_arrow_transform(
+    observer_position: np.ndarray,
+    time: Time,
+    pointing_target: PointingTarget,
+    camera_distance_au: float,
+) -> np.ndarray:
+    return _observer_velocity_arrow_transform(
+        observer_position,
+        time,
+        pointing_target,
+        camera_distance_au,
+    )
+
+
+def cmb_dipole_arrow_transform_in_root(scene: trimesh.Scene, time: Time) -> np.ndarray:
+    state = _earth_sun_state(time)
+    camera_distance = camera_distance_to_point_au(scene, _galactic_center_position(state))
+    cmb_local = _cmb_dipole_arrow_transform(time, camera_distance)
+    milky_transform, _ = scene.graph.get(MILKY_WAY_FRAME, ROOT_FRAME)
+    return milky_transform @ cmb_local
+
+
 def _milky_way_diameter_au(scene: trimesh.Scene) -> float:
     gc_transform, _ = scene.graph.get("galactic_center", ROOT_FRAME)
     galactic_center = gc_transform[:3, 3]
