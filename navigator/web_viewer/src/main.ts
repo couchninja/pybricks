@@ -119,6 +119,7 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
   let scenePollMs = SCENE_POLL_FAST_MS;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let inFlight = false;
+  let lastPointingTarget: string | null = null;
   const sidebarLegacyOrbits = document.getElementById("legacy-orbit-lines-control");
   let includeEphemerisOrbitPaths =
     sidebarLegacyOrbits instanceof HTMLInputElement ? sidebarLegacyOrbits.checked : false;
@@ -142,6 +143,10 @@ export function startEarthSunViewer(mount: HTMLElement): EarthSunViewer {
       return;
     }
     applyScenePollMs(scenePollIntervalMs(status.time_scale.preset));
+    if (lastPointingTarget !== null && lastPointingTarget !== status.target) {
+      void pollScene();
+    }
+    lastPointingTarget = status.target;
     viewer.applyNavigatorStatus({
       target: status.target,
       timeIso: status.time_scale.time_iso ?? null,

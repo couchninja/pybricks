@@ -31,7 +31,7 @@ import { createConstellationSky, skyOpacityForCameraDistance } from "./constella
 import { createFlatArrowGroup, disposeFlatArrowGroup, orientFlatArrow } from "./billboard-arrow";
 import { createEarthMesh } from "./earth-mesh";
 import { sampleKeplerianOrbitPoints, type KeplerianOrbitParams } from "./keplerian-orbit";
-import { parametricOrbitSampleCount } from "./orbit-path-samples";
+import { heliocentricOriginForParametricOrbit, parametricOrbitSampleCount } from "./orbit-path-samples";
 import { simulationTimeMsFromIso } from "./simulation-time";
 import { sampleTleOrbitPoints, type TleOrbitParams } from "./tle-orbit";
 import type {
@@ -538,14 +538,9 @@ export class EarthSunViewer {
       if (!entry) {
         continue;
       }
-      let origin: THREE.Vector3 | null = null;
-      if (orbit.origin_body === "earth") {
-        const anchor = orbit.origin_heliocentric_au;
-        if (anchor === undefined) {
-          continue;
-        }
-        originHeliocentric.set(anchor[0], anchor[1], anchor[2]);
-        origin = originHeliocentric;
+      const origin = heliocentricOriginForParametricOrbit(orbit, originHeliocentric);
+      if (origin === undefined) {
+        continue;
       }
       const samples = parametricOrbitSampleCount(orbit.name);
       if (orbit.kind === "keplerian") {

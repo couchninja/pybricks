@@ -8,7 +8,25 @@ import {
 } from "./scene-viewer-constants";
 import { simulationTimeMsFromIso } from "./simulation-time";
 import { sampleTleOrbitPoints, type TleOrbitParams } from "./tle-orbit";
-import type { ScenePath, SceneSnapshot } from "./scene-types";
+import type { ParametricOrbit, ScenePath, SceneSnapshot } from "./scene-types";
+
+/** Keplerian geocentric orbits are sampled in heliocentric space; TLE uses the path matrix at Earth. */
+export function heliocentricOriginForParametricOrbit(
+  orbit: ParametricOrbit,
+  target: THREE.Vector3,
+): THREE.Vector3 | null | undefined {
+  if (orbit.origin_body !== "earth") {
+    return null;
+  }
+  if (orbit.kind === "tle") {
+    return null;
+  }
+  const anchor = orbit.origin_heliocentric_au;
+  if (anchor === undefined) {
+    return undefined;
+  }
+  return target.set(anchor[0], anchor[1], anchor[2]);
+}
 
 export function parametricOrbitSampleCount(orbitName: string): number {
   if (orbitName === "earth_orbit") {
@@ -48,13 +66,10 @@ export function orbitWorldPointsFromSnapshot(
   }
 
   const localPoints: THREE.Vector3[] = [];
-  let origin: THREE.Vector3 | null = null;
-  if (orbit.origin_body === "earth") {
-    const anchor = orbit.origin_heliocentric_au;
-    if (anchor === undefined) {
-      return false;
-    }
-    origin = new THREE.Vector3(anchor[0], anchor[1], anchor[2]);
+  const originScratch = new THREE.Vector3();
+  const origin = heliocentricOriginForParametricOrbit(orbit, originScratch);
+  if (origin === undefined) {
+    return false;
   }
 
   const samples = parametricOrbitSampleCount(pathName);
