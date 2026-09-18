@@ -13,6 +13,7 @@ import {
   type CameraOrbitTweenHandle,
 } from "./camera-target-orbit";
 import { createConstellationSky, skyOpacityForCameraDistance } from "./constellation-sky";
+import { createFlatArrowGroup, disposeFlatArrowGroup, orientFlatArrow } from "./billboard-arrow";
 import { createEarthMesh } from "./earth-mesh";
 import type { ArrowDistanceAnchor, Rgb, SceneArrow, SceneBody, ScenePath, SceneSnapshot } from "./scene-types";
 
@@ -61,8 +62,8 @@ function createSphereMesh(radius: number, color: Rgb, emissiveIntensity = 0): TH
 }
 
 const ARROW_HEAD_LENGTH_FRACTION = 0.1;
-const ARROW_HEAD_RADIUS_EARTH_RADII = 0.15;
-const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.07;
+const ARROW_HEAD_WIDTH_EARTH_RADII = 0.3;
+const ARROW_SHAFT_WIDTH_EARTH_RADII = 0.14;
 const ARROW_OCCLUDED_OPACITY = 0.45;
 /** Temporary: set true to draw the faded behind-geometry arrow pass. */
 const ARROW_OCCLUDED_PASS_ENABLED = true;
@@ -96,84 +97,14 @@ function observerArrowShaftStartAu(
   return defaultGapAu * (cameraDistanceAu / defaultCameraDistanceAu);
 }
 
-function addArrowPart(
-  group: THREE.Group,
-  geometry: THREE.BufferGeometry,
-  positionY: number,
-  visibleMaterial: THREE.Material,
-  occludedMaterial: THREE.Material,
-): void {
-  const visible = new THREE.Mesh(geometry, visibleMaterial);
-  visible.position.y = positionY;
-  visible.renderOrder = ARROW_VISIBLE_RENDER_ORDER;
-  visible.userData.arrowOutline = true;
-  group.add(visible);
-
-  if (!ARROW_OCCLUDED_PASS_ENABLED) {
-    return;
-  }
-
-  const occluded = new THREE.Mesh(geometry, occludedMaterial);
-  occluded.position.y = positionY;
-  occluded.renderOrder = ARROW_OCCLUDED_RENDER_ORDER;
-  group.add(occluded);
-}
-
-function createSceneArrow(
-  direction: THREE.Vector3,
-  origin: THREE.Vector3,
-  length: number,
-  color: THREE.Color,
-  headLength: number,
-  headRadius: number,
-  shaftRadius: number,
-): THREE.Group {
-  const group = new THREE.Group();
-  const visibleMaterial = new THREE.MeshBasicMaterial({
-    color,
-    polygonOffset: true,
-    polygonOffsetFactor: ARROW_VISIBLE_POLYGON_OFFSET.factor,
-    polygonOffsetUnits: ARROW_VISIBLE_POLYGON_OFFSET.units,
-  });
-  const occludedMaterial = new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity: ARROW_OCCLUDED_OPACITY,
-    depthTest: true,
-    depthFunc: THREE.GreaterDepth,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: ARROW_OCCLUDED_POLYGON_OFFSET.factor,
-    polygonOffsetUnits: ARROW_OCCLUDED_POLYGON_OFFSET.units,
-  });
-  const shaftLength = length - headLength;
-  const shaftGeometry = new THREE.CylinderGeometry(shaftRadius, shaftRadius, shaftLength, 12);
-  addArrowPart(group, shaftGeometry, shaftLength / 2, visibleMaterial, occludedMaterial);
-  const headGeometry = new THREE.ConeGeometry(headRadius, headLength, 12);
-  addArrowPart(group, headGeometry, shaftLength + headLength / 2, visibleMaterial, occludedMaterial);
-  group.position.copy(origin);
-  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-  group.frustumCulled = false;
-  return group;
-}
-
-function disposeSceneArrow(group: THREE.Group): void {
-  const geometries = new Set<THREE.BufferGeometry>();
-  const materials = new Set<THREE.Material>();
-  for (const child of group.children) {
-    if (!(child instanceof THREE.Mesh)) {
-      continue;
-    }
-    geometries.add(child.geometry);
-    materials.add(child.material as THREE.Material);
-  }
-  for (const geometry of geometries) {
-    geometry.dispose();
-  }
-  for (const material of materials) {
-    material.dispose();
-  }
-}
+const FLAT_ARROW_MATERIAL_OPTIONS = {
+  occludedOpacity: ARROW_OCCLUDED_OPACITY,
+  drawOccludedPass: ARROW_OCCLUDED_PASS_ENABLED,
+  visibleRenderOrder: ARROW_VISIBLE_RENDER_ORDER,
+  occludedRenderOrder: ARROW_OCCLUDED_RENDER_ORDER,
+  visiblePolygonOffset: ARROW_VISIBLE_POLYGON_OFFSET,
+  occludedPolygonOffset: ARROW_OCCLUDED_POLYGON_OFFSET,
+} as const;
 
 function cameraDistanceForArrow(
   camera: THREE.PerspectiveCamera,
@@ -501,7 +432,7 @@ export class EarthSunViewer {
         continue;
       }
       this.contentRoot.remove(existing);
-      disposeSceneArrow(existing);
+      disposeFlatArrowGroup(existing);
       this.arrows.delete(name);
     }
   }
@@ -546,37 +477,36 @@ export class EarthSunViewer {
       const gapDelta = Math.abs(shaftStartAu - frame.displayGapAu);
       const rebuildLength = lengthDelta > frame.displayLengthAu * 0.02 || lengthDelta > this.arrowMeshLengthAu * 0.02;
       const repositionGap = gapDelta > Math.max(frame.displayGapAu * 0.02, this.arrowEarthRadiusAu * 1e-4);
-      const existing = this.arrows.get(name);
-      if (!rebuildLength && !repositionGap && existing) {
+      let arrow = this.arrows.get(name);
+      if (!rebuildLength && !repositionGap && arrow) {
+        orientFlatArrow(arrow, origin, frame.direction, this.camera);
         continue;
       }
       frame.displayLengthAu = displayLength;
       frame.displayGapAu = shaftStartAu;
 
-      if (rebuildLength || !existing) {
-        if (existing) {
-          this.contentRoot.remove(existing);
-          disposeSceneArrow(existing);
+      if (rebuildLength || !arrow) {
+        if (arrow) {
+          this.contentRoot.remove(arrow);
+          disposeFlatArrowGroup(arrow);
         }
 
         const sizeScale = displayLength / this.arrowMeshLengthAu;
         const headLength = displayLength * ARROW_HEAD_LENGTH_FRACTION;
-        const headRadius = ARROW_HEAD_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
-        const shaftRadius = ARROW_SHAFT_RADIUS_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
-        const arrow = createSceneArrow(
-          frame.direction,
-          origin,
+        const headWidth = ARROW_HEAD_WIDTH_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+        const shaftWidth = ARROW_SHAFT_WIDTH_EARTH_RADII * this.arrowEarthRadiusAu * sizeScale;
+        arrow = createFlatArrowGroup(
           displayLength,
           rgbToThree(frame.color),
           headLength,
-          headRadius,
-          shaftRadius,
+          headWidth,
+          shaftWidth,
+          FLAT_ARROW_MATERIAL_OPTIONS,
         );
         this.contentRoot.add(arrow);
         this.arrows.set(name, arrow);
-      } else if (existing) {
-        existing.position.copy(origin);
       }
+      orientFlatArrow(arrow, origin, frame.direction, this.camera);
     }
     this.syncOutlineSelection();
   }
