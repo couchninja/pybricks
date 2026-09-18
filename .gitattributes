@@ -1,4 +1,81 @@
 # SCM syntax highlighting & preventing 3-way merges
 pixi.lock merge=binary linguist-language=YAML linguist-generated=true -diff
+*.stl filter=lfs diff=lfs merge=lfs -text
+*.STL filter=lfs diff=lfs merge=lfs -text
+*.ply filter=lfs diff=lfs merge=lfs -text
+*.PLY filter=lfs diff=lfs merge=lfs -text
+*.obj filter=lfs diff=lfs merge=lfs -text
+*.OBJ filter=lfs diff=lfs merge=lfs -text
+*.skp filter=lfs diff=lfs merge=lfs -text
+*.SKP filter=lfs diff=lfs merge=lfs -text
+*.ply~ filter=lfs diff=lfs merge=lfs -text
+*.PLY~ filter=lfs diff=lfs merge=lfs -text
+*.off filter=lfs diff=lfs merge=lfs -text
+*.OFF filter=lfs diff=lfs merge=lfs -text
+*.csv filter=lfs diff=lfs merge=lfs -text
+*.CSV filter=lfs diff=lfs merge=lfs -text
+*.stp filter=lfs diff=lfs merge=lfs -text
+*.STP filter=lfs diff=lfs merge=lfs -text
+*.step filter=lfs diff=lfs merge=lfs -text
+*.STEP filter=lfs diff=lfs merge=lfs -text
+*.igs filter=lfs diff=lfs merge=lfs -text
+*.IGS filter=lfs diff=lfs merge=lfs -text
+*.iges filter=lfs diff=lfs merge=lfs -text
+*.IGES filter=lfs diff=lfs merge=lfs -text
+*.x_t filter=lfs diff=lfs merge=lfs -text
+*.X_T filter=lfs diff=lfs merge=lfs -text
+*.x_b filter=lfs diff=lfs merge=lfs -text
+*.X_B filter=lfs diff=lfs merge=lfs -text
+*.3dm filter=lfs diff=lfs merge=lfs -text
+*.3DM filter=lfs diff=lfs merge=lfs -text
+*.sldprt filter=lfs diff=lfs merge=lfs -text
+*.SLDPRT filter=lfs diff=lfs merge=lfs -text
+*.vtu filter=lfs diff=lfs merge=lfs -text
+*.VTU filter=lfs diff=lfs merge=lfs -text
+*.sat filter=lfs diff=lfs merge=lfs -text
+*.SAT filter=lfs diff=lfs merge=lfs -text
+*.prt filter=lfs diff=lfs merge=lfs -text
+*.prt.* filter=lfs diff=lfs merge=lfs -text
+*.PRT filter=lfs diff=lfs merge=lfs -text
+*.PRT.* filter=lfs diff=lfs merge=lfs -text
+*.catpart filter=lfs diff=lfs merge=lfs -text
+*.CATPART filter=lfs diff=lfs merge=lfs -text
+*.CATPart filter=lfs diff=lfs merge=lfs -text
+*.ipt filter=lfs diff=lfs merge=lfs -text
+*.IPT filter=lfs diff=lfs merge=lfs -text
+
+*.zip filter=lfs diff=lfs merge=lfs -text
+*.ZIP filter=lfs diff=lfs merge=lfs -text
+*.tar.xz filter=lfs diff=lfs merge=lfs -text
+*.TAR.XZ filter=lfs diff=lfs merge=lfs -text
+
+*.feather filter=lfs diff=lfs merge=lfs -text
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text
+
+# binaries
+*.out filter=lfs diff=lfs merge=lfs -text
+*.so filter=lfs diff=lfs merge=lfs -text
+*.so.* filter=lfs diff=lfs merge=lfs -text
+
+*.pdf filter=lfs diff=lfs merge=lfs -text
+*.PDF filter=lfs diff=lfs merge=lfs -text
+
+*.ipynb filter=lfs diff=lfs merge=lfs -text
+
+# images
+*.png filter=lfs diff=lfs merge=lfs -text
+*.PNG filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
+*.JPG filter=lfs diff=lfs merge=lfs -text
 *.jpeg filter=lfs diff=lfs merge=lfs -text
+*.JPEG filter=lfs diff=lfs merge=lfs -text
+*.cr2 filter=lfs diff=lfs merge=lfs -text
+*.CR2 filter=lfs diff=lfs merge=lfs -text
+
+# beyondpod backup files
+*.bpbak filter=lfs diff=lfs merge=lfs -text
+*.BPBAK filter=lfs diff=lfs merge=lfs -text
+*.autobak filter=lfs diff=lfs merge=lfs -text
+*.AUTOBAK filter=lfs diff=lfs merge=lfs -text
