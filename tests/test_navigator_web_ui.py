@@ -1,4 +1,6 @@
+import gzip
 import json
+import zlib
 from collections.abc import Iterator
 
 import pytest
@@ -6,6 +8,8 @@ import pytest
 from gpio.button_menu_host import HostButtonMenu
 from navigator.web_ui import (
     LogBuffer,
+    _choose_content_encoding,
+    _http_response,
     _index_html,
     _status_payload,
     _viewer_asset,
@@ -81,3 +85,34 @@ def test_navigator_session_changes_each_run() -> None:
     assert len(second) == 32
     assert first != second
     assert navigator_session_id() == second
+
+
+def test_choose_content_encoding_respects_quality() -> None:
+    assert _choose_content_encoding("gzip, deflate, br") == "gzip"
+    assert _choose_content_encoding("deflate, gzip;q=0.8") == "deflate"
+    assert _choose_content_encoding("deflate;q=0.5, gzip") == "gzip"
+
+
+def test_http_response_gzip_when_accepted() -> None:
+    body = b'{"data":"' + b"x" * 600 + b'"}'
+    raw = _http_response(200, body, "application/json", accept_encoding="gzip")
+    header, payload = raw.split(b"\r\n\r\n", 1)
+    assert b"Content-Encoding: gzip\r\n" in header
+    assert gzip.decompress(payload) == body
+
+
+def test_http_response_skips_small_and_images() -> None:
+    small = _http_response(200, b"{}", "application/json", accept_encoding="gzip")
+    assert b"Content-Encoding:" not in small
+
+    jpeg = b"\xff\xd8" + b"x" * 600
+    image = _http_response(200, jpeg, "image/jpeg", accept_encoding="gzip")
+    assert b"Content-Encoding:" not in image
+
+
+def test_http_response_deflate_when_requested() -> None:
+    body = b"alpha " * 200
+    raw = _http_response(200, body, "text/plain", accept_encoding="deflate")
+    header, payload = raw.split(b"\r\n\r\n", 1)
+    assert b"Content-Encoding: deflate\r\n" in header
+    assert zlib.decompress(payload) == body

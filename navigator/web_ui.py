@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 import mimetypes
 import sys
 import uuid
+import zlib
 from collections import deque
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
@@ -48,7 +50,17 @@ LOG_LINE_LIMIT = 200
 _STATUS_POLL_MS = 2000
 _VIEWER_DIST = Path(__file__).resolve().parent / "web_viewer" / "dist"
 _SESSION_POLL_MS = 1000
+_COMPRESS_MIN_BYTES = 512
 _navigator_session_id: str | None = None
+
+_NO_COMPRESS_CONTENT_TYPES = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+    }
+)
 
 _BODY_TARGETS = frozenset(
     {
@@ -504,13 +516,63 @@ def _status_payload(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> dict[
     }
 
 
-async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes]:
+def _choose_content_encoding(accept_header: str) -> str | None:
+    codings: list[tuple[float, str]] = []
+    for part in accept_header.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ";q=" in part:
+            name, q_str = part.split(";q=", 1)
+            name = name.strip()
+            try:
+                quality = float(q_str.strip())
+            except ValueError:
+                quality = 0.0
+        else:
+            name = part
+            quality = 1.0
+        if name in ("gzip", "deflate") and quality > 0.0:
+            codings.append((quality, name))
+    if not codings:
+        return None
+    codings.sort(key=lambda item: (-item[0], 0 if item[1] == "gzip" else 1))
+    return codings[0][1]
+
+
+def _accept_encoding_from_header(header: bytes) -> str | None:
+    for line in header.split(b"\r\n")[1:]:
+        if line.lower().startswith(b"accept-encoding:"):
+            value = line.split(b":", 1)[1].decode("latin-1").strip()
+            return _choose_content_encoding(value)
+    return None
+
+
+def _compress_body(body: bytes, encoding: str) -> bytes:
+    if encoding == "gzip":
+        return gzip.compress(body, compresslevel=1)
+    if encoding == "deflate":
+        return zlib.compress(body, level=1)
+    raise ValueError(f"unsupported content encoding: {encoding}")
+
+
+def _compressible_response_body(body: bytes, content_type: str, status: int) -> bool:
+    if status == 204 or not body:
+        return False
+    if len(body) < _COMPRESS_MIN_BYTES:
+        return False
+    mime = content_type.split(";", 1)[0].strip().lower()
+    return mime not in _NO_COMPRESS_CONTENT_TYPES
+
+
+async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes, str | None]:
     header = await reader.readuntil(b"\r\n\r\n")
     first_line = header.split(b"\r\n", 1)[0].decode("utf-8", errors="replace")
     parts = first_line.split()
     if len(parts) < 2:
         raise ValueError("bad request line")
     method, path = parts[0], parts[1]
+    accept_encoding = _accept_encoding_from_header(header)
     body = b""
     content_length = 0
     for line in header.split(b"\r\n")[1:]:
@@ -519,7 +581,7 @@ async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, bytes]:
             break
     if content_length > 0:
         body = await reader.readexactly(content_length)
-    return method, path, body
+    return method, path, body, accept_encoding
 
 
 def _apply_time_scale_preset(preset: str) -> None:
@@ -550,6 +612,7 @@ def _http_response(
     content_type: str,
     *,
     extra_headers: dict[str, str] | None = None,
+    accept_encoding: str | None = None,
 ) -> bytes:
     reason = {
         200: "OK",
@@ -558,11 +621,20 @@ def _http_response(
         404: "Not Found",
         405: "Method Not Allowed",
     }[status]
-    header = f"HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {len(body)}\r\n"
+    response_body = body
+    content_encoding: str | None = None
+    if accept_encoding and _compressible_response_body(body, content_type, status):
+        compressed = _compress_body(body, accept_encoding)
+        if len(compressed) < len(body):
+            response_body = compressed
+            content_encoding = accept_encoding
+    header = f"HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {len(response_body)}\r\n"
+    if content_encoding is not None:
+        header += f"Content-Encoding: {content_encoding}\r\n"
     for key, value in (extra_headers or {}).items():
         header += f"{key}: {value}\r\n"
     header += "Connection: close\r\n\r\n"
-    return header.encode("ascii") + body
+    return header.encode("ascii") + response_body
 
 
 async def _handle_client(
@@ -572,7 +644,7 @@ async def _handle_client(
     log_buffer: LogBuffer,
 ) -> None:
     try:
-        method, path, body = await _read_request(reader)
+        method, path, body, accept_encoding = await _read_request(reader)
         route = _request_path(path)
         if route == "/" and method == "GET":
             body = _index_html().encode("utf-8")
@@ -582,6 +654,7 @@ async def _handle_client(
                     body,
                     "text/html; charset=utf-8",
                     extra_headers={"Cache-Control": "no-cache"},
+                    accept_encoding=accept_encoding,
                 )
             )
         elif method == "GET" and (asset := _viewer_asset(path)) is not None:
@@ -592,22 +665,23 @@ async def _handle_client(
                     body,
                     content_type,
                     extra_headers={"Cache-Control": "no-cache"},
+                    accept_encoding=accept_encoding,
                 )
             )
         elif route == "/api/navigator-session" and method == "GET":
             payload = json.dumps({"session": navigator_session_id()}).encode("utf-8")
-            writer.write(_http_response(200, payload, "application/json"))
+            writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/status" and method == "GET":
             payload = json.dumps(_status_payload(buttons, log_buffer)).encode("utf-8")
-            writer.write(_http_response(200, payload, "application/json"))
+            writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/scene" and method == "GET":
             target = buttons.selected_button["target"]
             snapshot = await asyncio.to_thread(scene_snapshot_payload, target)
             payload = json.dumps(snapshot).encode("utf-8")
-            writer.write(_http_response(200, payload, "application/json"))
+            writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/time-scale" and method == "GET":
             payload = json.dumps(time_scale_status_payload()).encode("utf-8")
-            writer.write(_http_response(200, payload, "application/json"))
+            writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/time-scale" and method == "POST":
             try:
                 data = json.loads(body.decode("utf-8"))
@@ -616,10 +690,10 @@ async def _handle_client(
                     raise ValueError("preset must be a string")
                 _apply_time_scale_preset(preset)
             except (KeyError, ValueError, json.JSONDecodeError):
-                writer.write(_http_response(400, b"bad request", "text/plain"))
+                writer.write(_http_response(400, b"bad request", "text/plain", accept_encoding=accept_encoding))
             else:
                 payload = json.dumps(time_scale_status_payload()).encode("utf-8")
-                writer.write(_http_response(200, payload, "application/json"))
+                writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/target" and method == "POST":
             try:
                 data = json.loads(body.decode("utf-8"))
@@ -628,13 +702,20 @@ async def _handle_client(
                     raise ValueError("target must be a string")
                 buttons.select_target(PointingTarget(target_value))
             except (KeyError, ValueError, json.JSONDecodeError):
-                writer.write(_http_response(400, b"bad request", "text/plain"))
+                writer.write(_http_response(400, b"bad request", "text/plain", accept_encoding=accept_encoding))
             else:
-                writer.write(_http_response(204, b"", "text/plain"))
+                writer.write(_http_response(204, b"", "text/plain", accept_encoding=accept_encoding))
         elif method == "GET":
-            writer.write(_http_response(404, b"Not found", "text/plain"))
+            writer.write(_http_response(404, b"Not found", "text/plain", accept_encoding=accept_encoding))
         else:
-            writer.write(_http_response(405, b"Method not allowed", "text/plain"))
+            writer.write(
+                _http_response(
+                    405,
+                    b"Method not allowed",
+                    "text/plain",
+                    accept_encoding=accept_encoding,
+                )
+            )
     except (asyncio.IncompleteReadError, ConnectionResetError, ValueError):
         pass
     finally:
