@@ -5,7 +5,22 @@ import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRe
 
 import { createViewerOutlinePipeline, type ViewerOutlinePipeline } from "./viewer-outline-pipeline";
 
-import { cameraPoseFromState, desiredOrbitTargetCameraPose, heavenlyBodyOrbitRadiusAu } from "./camera-orbit-framing";
+import {
+  cameraPoseFromState,
+  desiredOrbitTargetCameraPose,
+  heavenlyBodyOrbitRadiusAu,
+  milkyWayDiameterAuFromSnapshot,
+  sceneScaleAuFromSnapshot,
+} from "./camera-orbit-framing";
+import {
+  ARROW_LENGTH_CAMERA_DISTANCE_FRACTION,
+  ARROW_MESH_LENGTH_AU,
+  DEFAULT_CAMERA_DISTANCE_AU,
+  EARTH_ORBIT_RADIUS_AU,
+  EARTH_RADIUS_AU,
+  SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE,
+  SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE,
+} from "./scene-viewer-constants";
 import {
   cameraOrbitTweenActive,
   tweenCameraToOrbitPose,
@@ -38,6 +53,13 @@ const BODY_LABEL_COLORS: Record<string, string> = {
   iss: "rgb(70, 130, 255)",
   observer: "rgb(255, 80, 40)",
   galactic_center: "rgb(240, 200, 255)",
+};
+const BODY_LABELS: Record<string, string> = {
+  sun: "Sun",
+  earth: "Earth",
+  moon: "Moon",
+  iss: "ISS",
+  galactic_center: "Milky Way center",
 };
 
 function rgbToThree([r, g, b]: Rgb): THREE.Color {
@@ -292,22 +314,19 @@ export class EarthSunViewer {
 
   applySnapshot(snapshot: SceneSnapshot): void {
     this.sceneSnapshot = snapshot;
-    this.defaultCameraDistance = snapshot.default_camera_distance_au;
-    this.earthRadiusAu = snapshot.earth_radius_au;
-    this.earthOrbitRadiusAu = snapshot.earth_orbit_radius_au;
-    this.skyboxFadeOrbitMultiple = snapshot.skybox_fade_camera_distance_orbit_multiple;
-    this.skyboxFadeSpanOrbitMultiple = snapshot.skybox_fade_span_orbit_radius_multiple;
-    this.arrowMeshLengthAu = snapshot.arrow_mesh_length_au;
-    this.arrowEarthRadiusAu = snapshot.earth_radius_au;
-    const fraction = snapshot.arrow_length_camera_distance_fraction;
-    this.arrowLengthCameraFraction =
-      typeof fraction === "number" && fraction > 0
-        ? fraction
-        : snapshot.arrow_mesh_length_au / snapshot.default_camera_distance_au;
-    this.sceneScale = snapshot.scene_scale;
+    this.defaultCameraDistance = DEFAULT_CAMERA_DISTANCE_AU;
+    this.earthRadiusAu = EARTH_RADIUS_AU;
+    this.earthOrbitRadiusAu = EARTH_ORBIT_RADIUS_AU;
+    this.skyboxFadeOrbitMultiple = SKYBOX_FADE_CAMERA_DISTANCE_ORBIT_MULTIPLE;
+    this.skyboxFadeSpanOrbitMultiple = SKYBOX_FADE_SPAN_ORBIT_RADIUS_MULTIPLE;
+    this.arrowMeshLengthAu = ARROW_MESH_LENGTH_AU;
+    this.arrowEarthRadiusAu = EARTH_RADIUS_AU;
+    this.arrowLengthCameraFraction = ARROW_LENGTH_CAMERA_DISTANCE_FRACTION;
+    this.sceneScale = sceneScaleAuFromSnapshot(snapshot);
     this.constellationSky.setInertialToRootRotation(snapshot.inertial_to_root_rotation);
-    if (snapshot.milky_way_diameter_au > 0) {
-      this.controls.maxDistance = snapshot.milky_way_diameter_au;
+    const milkyWayDiameterAu = milkyWayDiameterAuFromSnapshot(snapshot);
+    if (milkyWayDiameterAu > 0) {
+      this.controls.maxDistance = milkyWayDiameterAu;
     }
     this.clampCameraDistance();
 
@@ -338,7 +357,9 @@ export class EarthSunViewer {
     if (!entry) {
       const root = new THREE.Object3D();
       root.name = body.name;
-      const label = body.name === "observer" ? null : createLabel(body.label, BODY_LABEL_COLORS[body.name] ?? "white");
+      const labelText = BODY_LABELS[body.name];
+      const label =
+        body.name === "observer" || !labelText ? null : createLabel(labelText, BODY_LABEL_COLORS[body.name] ?? "white");
       if (label) {
         root.add(label);
       }

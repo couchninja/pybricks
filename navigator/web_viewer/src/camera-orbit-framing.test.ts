@@ -10,18 +10,7 @@ function translationMatrix(position: THREE.Vector3): number[] {
 
 function baseSnapshot(overrides: Partial<SceneSnapshot> = {}): SceneSnapshot {
   return {
-    scene_scale: 2,
-    default_camera_distance_au: 1,
-    earth_radius_au: 0.001,
-    earth_orbit_radius_au: 1,
-    skybox_fade_camera_distance_orbit_multiple: 1,
-    skybox_fade_span_orbit_radius_multiple: 1,
-    arrow_mesh_length_au: 0.1,
-    arrow_length_camera_distance_fraction: 0.1,
-    z_near: 0.001,
-    z_far: 10,
     inertial_to_root_rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1],
-    milky_way_diameter_au: 10,
     bodies: [],
     paths: [],
     arrows: [],
@@ -40,14 +29,12 @@ describe("desiredOrbitTargetCameraPose for ISS", () => {
       bodies: [
         {
           name: "earth",
-          label: "Earth",
           radius: 0.001,
           color: [0, 0, 1],
           matrix: translationMatrix(earthCenter),
         },
         {
           name: "iss",
-          label: "ISS",
           radius: 0.0001,
           color: [0, 0, 1],
           matrix: translationMatrix(issPosition),

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 
+import { DEFAULT_CAMERA_DISTANCE_AU, EARTH_ORBIT_RADIUS_AU, EARTH_RADIUS_AU } from "./scene-viewer-constants";
 import type { ScenePath, SceneSnapshot } from "./scene-types";
 
 const ORBIT_PLANE_ELEVATION_RAD = THREE.MathUtils.degToRad(20);
@@ -47,6 +48,9 @@ const MAX_GEOCENTRIC_ORBIT_RADIUS_AU = 0.01;
 const _heavenlyOrbitCenter = new THREE.Vector3();
 const _heavenlyOrbitBody = new THREE.Vector3();
 const _heavenlyOrbitMatrix = new THREE.Matrix4();
+const _sceneBoundsMin = new THREE.Vector3();
+const _sceneBoundsMax = new THREE.Vector3();
+const _sceneBoundsExtents = new THREE.Vector3();
 
 const BODY_FOR_TARGET: Partial<Record<string, string>> = {
   sun: "sun",
@@ -174,16 +178,16 @@ function targetWorldPosition(
   if (pointingTarget === "cmb_dipole") {
     const cmb = snapshot.arrows.find((entry) => entry.name === "cmb_dipole_arrow");
     if (cmb) {
-      const extent = Math.max(snapshot.default_camera_distance_au, snapshot.scene_scale);
+      const extent = Math.max(DEFAULT_CAMERA_DISTANCE_AU, sceneScaleAuFromSnapshot(snapshot));
       return new THREE.Vector3(...cmb.base).add(new THREE.Vector3(...cmb.direction).multiplyScalar(extent));
     }
   }
   const velocityArrow = snapshot.arrows.find((entry) => entry.name === "observer_velocity_arrow");
   if (velocityArrow) {
-    const extent = Math.max(snapshot.default_camera_distance_au, snapshot.scene_scale);
+    const extent = Math.max(DEFAULT_CAMERA_DISTANCE_AU, sceneScaleAuFromSnapshot(snapshot));
     return observer.clone().add(new THREE.Vector3(...velocityArrow.direction).multiplyScalar(extent));
   }
-  return observer.clone().add(new THREE.Vector3(0, 0, snapshot.default_camera_distance_au));
+  return observer.clone().add(new THREE.Vector3(0, 0, DEFAULT_CAMERA_DISTANCE_AU));
 }
 
 function bodyPositionFromSnapshot(snapshot: SceneSnapshot, name: string, target: THREE.Vector3): boolean {
@@ -264,7 +268,7 @@ export function heavenlyBodyOrbitRadiusAu(
   if (bodyName === "moon" || bodyName === "iss") {
     return geocentricBodyOrbitRadiusAu(bodyName, snapshot, bodyWorldPosition);
   }
-  return snapshot.earth_orbit_radius_au;
+  return EARTH_ORBIT_RADIUS_AU;
 }
 
 function halfViewportFovRad(camera: THREE.PerspectiveCamera, fill: number): number {
@@ -370,7 +374,7 @@ function desiredIssOrbitCameraPose(
   const toward = targetWorldPosition(snapshot, pointingTarget, observer, bodyWorldPosition);
   const up = inPlaneHorizontal(normal, observer, toward);
 
-  const minDistance = Math.max(snapshot.default_camera_distance_au * 0.01, 1e-14);
+  const minDistance = Math.max(DEFAULT_CAMERA_DISTANCE_AU * 0.01, 1e-14);
   let distance = minDistanceToFramePointsInView(camera, observer, normal, orbitPoints, minDistance, maxDistance);
   if (Number.isFinite(maxDistance) && maxDistance > 0) {
     distance = Math.min(distance, maxDistance);
@@ -413,7 +417,7 @@ function orbitRadiusAu(
     }
   }
 
-  return snapshot.earth_orbit_radius_au;
+  return EARTH_ORBIT_RADIUS_AU;
 }
 
 function desiredEarthRotationCameraPose(
@@ -429,7 +433,7 @@ function desiredEarthRotationCameraPose(
     return null;
   }
 
-  const earthRadius = snapshot.earth_radius_au;
+  const earthRadius = EARTH_RADIUS_AU;
   const fromCenter = observer.clone().sub(earthCenter);
   let outward = fromCenter.clone();
   if (outward.lengthSq() < 1e-20) {
@@ -517,7 +521,7 @@ export function desiredOrbitTargetCameraPose(
   if (Number.isFinite(maxDistance) && maxDistance > 0) {
     distance = Math.min(distance, maxDistance);
   }
-  distance = Math.max(distance, snapshot.default_camera_distance_au * 0.01);
+  distance = Math.max(distance, DEFAULT_CAMERA_DISTANCE_AU * 0.01);
 
   return {
     offset: offsetDirection.multiplyScalar(distance),
@@ -530,4 +534,78 @@ export function cameraPoseFromState(camera: THREE.PerspectiveCamera, pivot: THRE
     offset: camera.position.clone().sub(pivot),
     up: camera.up.clone().normalize(),
   };
+}
+
+/** Matches Trimesh `Scene.scale` (L2 norm of the world-axis-aligned bounds). */
+export function sceneScaleAuFromSnapshot(snapshot: SceneSnapshot): number {
+  _sceneBoundsMin.set(Infinity, Infinity, Infinity);
+  _sceneBoundsMax.set(-Infinity, -Infinity, -Infinity);
+  let hasGeometry = false;
+
+  const includePoint = (x: number, y: number, z: number): void => {
+    hasGeometry = true;
+    if (x < _sceneBoundsMin.x) {
+      _sceneBoundsMin.x = x;
+    }
+    if (y < _sceneBoundsMin.y) {
+      _sceneBoundsMin.y = y;
+    }
+    if (z < _sceneBoundsMin.z) {
+      _sceneBoundsMin.z = z;
+    }
+    if (x > _sceneBoundsMax.x) {
+      _sceneBoundsMax.x = x;
+    }
+    if (y > _sceneBoundsMax.y) {
+      _sceneBoundsMax.y = y;
+    }
+    if (z > _sceneBoundsMax.z) {
+      _sceneBoundsMax.z = z;
+    }
+  };
+
+  for (const body of snapshot.bodies) {
+    _heavenlyOrbitMatrix.fromArray(body.matrix);
+    _heavenlyOrbitCenter.setFromMatrixPosition(_heavenlyOrbitMatrix);
+    includePoint(
+      _heavenlyOrbitCenter.x - body.radius,
+      _heavenlyOrbitCenter.y - body.radius,
+      _heavenlyOrbitCenter.z - body.radius,
+    );
+    includePoint(
+      _heavenlyOrbitCenter.x + body.radius,
+      _heavenlyOrbitCenter.y + body.radius,
+      _heavenlyOrbitCenter.z + body.radius,
+    );
+  }
+  for (const path of snapshot.paths) {
+    for (const point of pathPoints(path)) {
+      includePoint(point.x, point.y, point.z);
+    }
+  }
+  for (const arrow of snapshot.arrows) {
+    includePoint(arrow.base[0], arrow.base[1], arrow.base[2]);
+  }
+
+  if (!hasGeometry) {
+    return 1;
+  }
+  _sceneBoundsExtents.subVectors(_sceneBoundsMax, _sceneBoundsMin);
+  return _sceneBoundsExtents.length();
+}
+
+/** Galactic orbit diameter; upper bound for camera distance from the orbit pivot. */
+export function milkyWayDiameterAuFromSnapshot(snapshot: SceneSnapshot): number {
+  const galacticCenter = snapshot.bodies.find((body) => body.name === "galactic_center");
+  const galacticOrbit = snapshot.paths.find((path) => path.name === "galactic_orbit");
+  if (!galacticCenter || !galacticOrbit) {
+    return 0;
+  }
+  _heavenlyOrbitMatrix.fromArray(galacticCenter.matrix);
+  _heavenlyOrbitCenter.setFromMatrixPosition(_heavenlyOrbitMatrix);
+  let maxRadius = 0;
+  for (const point of pathPoints(galacticOrbit)) {
+    maxRadius = Math.max(maxRadius, point.distanceTo(_heavenlyOrbitCenter));
+  }
+  return 2 * maxRadius;
 }
