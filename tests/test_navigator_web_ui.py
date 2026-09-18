@@ -2,6 +2,7 @@ import gzip
 import json
 import zlib
 from collections.abc import Iterator
+from typing import Any, cast
 
 import pytest
 
@@ -11,8 +12,10 @@ from navigator.web_ui import (
     _choose_content_encoding,
     _http_response,
     _index_html,
+    _status_include_logs,
     _status_payload,
     _viewer_asset,
+    _web_status_payload,
     begin_navigator_session,
     capture_stdout,
     navigator_session_id,
@@ -35,13 +38,15 @@ def test_index_html_includes_target_buttons() -> None:
         assert f'data-target="{target.value}"' in html
         assert target.label in html
     assert "Next target" not in html
+    assert 'id="server-status"' in html
+    assert "Server connected" in html
 
 
 def test_status_payload_includes_target_and_logs(menu_without_gpio: HostButtonMenu) -> None:
     log_buffer = LogBuffer()
     with capture_stdout(log_buffer):
         print("hello navigator")
-    payload = _status_payload(menu_without_gpio, log_buffer)
+    payload = _status_payload(menu_without_gpio, log_buffer, include_logs=True)
     assert payload["target"] == PointingTarget.EARTH_ROTATION.value
     assert payload["target_label"] == "Earth rotation"
     assert payload["speed_km_h"] is not None
@@ -52,12 +57,37 @@ def test_status_payload_includes_target_and_logs(menu_without_gpio: HostButtonMe
 
 def test_status_payload_omits_speed_for_sun(menu_without_gpio: HostButtonMenu) -> None:
     menu_without_gpio.select_target(PointingTarget.SUN)
-    payload = _status_payload(menu_without_gpio, LogBuffer())
+    payload = _status_payload(menu_without_gpio, LogBuffer(), include_logs=False)
     assert payload["speed_km_h"] is None
 
 
+def test_status_payload_omits_logs_when_not_requested(menu_without_gpio: HostButtonMenu) -> None:
+    log_buffer = LogBuffer()
+    with capture_stdout(log_buffer):
+        print("hidden")
+    payload = _status_payload(menu_without_gpio, log_buffer, include_logs=False)
+    assert "logs" not in payload
+
+
+def test_status_include_logs_query() -> None:
+    assert not _status_include_logs("/api/status")
+    assert _status_include_logs("/api/status?logs=1")
+    assert _status_include_logs("/api/status?logs")
+
+
 def test_status_payload_json_serializable(menu_without_gpio: HostButtonMenu) -> None:
-    payload = _status_payload(menu_without_gpio, LogBuffer())
+    payload = _status_payload(menu_without_gpio, LogBuffer(), include_logs=False)
+    json.dumps(payload)
+
+
+def test_web_status_payload_combines_ui_fields(menu_without_gpio: HostButtonMenu) -> None:
+    begin_navigator_session()
+    payload = _web_status_payload(menu_without_gpio, LogBuffer(), include_logs=False)
+    assert payload["target"] == PointingTarget.EARTH_ROTATION.value
+    assert payload["session"] == navigator_session_id()
+    time_scale = cast(dict[str, Any], payload["time_scale"])
+    assert "preset" in time_scale
+    assert time_scale["time_iso"]
     json.dumps(payload)
 
 

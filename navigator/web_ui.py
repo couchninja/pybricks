@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs
 
 from astropy import units as u
 
@@ -49,7 +50,6 @@ WEB_PORT = web_port_for_platform(sys.platform)
 LOG_LINE_LIMIT = 200
 _STATUS_POLL_MS = 2000
 _VIEWER_DIST = Path(__file__).resolve().parent / "web_viewer" / "dist"
-_SESSION_POLL_MS = 1000
 _COMPRESS_MIN_BYTES = 512
 _navigator_session_id: str | None = None
 
@@ -268,11 +268,42 @@ _INDEX_HTML = """<!DOCTYPE html>
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8125rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+    .server-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .server-status.connected {
+      color: #78dc90;
+    }
+    .server-status.connected .server-status-dot {
+      background: #78dc90;
+    }
+    .server-status.disconnected {
+      color: #f08080;
+    }
+    .server-status.disconnected .server-status-dot {
+      background: #f08080;
+    }
   </style>
 </head>
 <body>
   <div class="app-shell">
   <div class="app-controls">
+  <div class="server-status connecting" id="server-status" role="status">
+    <span class="server-status-dot" aria-hidden="true"></span>
+    <span id="server-status-text">Connecting…</span>
+  </div>
   <div class="time-scale">
     <div class="time-scale-label">Simulation time</div>
     <div class="time-scale-buttons">
@@ -304,6 +335,9 @@ __TARGET_BUTTONS__
     const targetEl = document.getElementById("target");
     const speedEl = document.getElementById("speed");
     const logsEl = document.getElementById("logs");
+    const logsPanel = document.querySelector("details.logs-panel");
+    const serverStatusEl = document.getElementById("server-status");
+    const serverStatusTextEl = document.getElementById("server-status-text");
     const timeScaleButtons = document.querySelectorAll("button.time-scale");
     const targetButtons = document.querySelectorAll("button.target-btn");
 
@@ -314,21 +348,31 @@ __TARGET_BUTTONS__
       }
     }
 
-    function applyTimeScaleUi(data) {
+    function applyTimeScaleUi(timeScale) {
       for (const btn of timeScaleButtons) {
         const preset = btn.dataset.preset;
         const active =
           preset === "now"
-            ? data.preset === "realtime"
-            : preset === data.preset;
+            ? timeScale.preset === "realtime"
+            : preset === timeScale.preset;
         btn.classList.toggle("active", active);
       }
     }
 
-    async function refreshTimeScale() {
-      const res = await fetch("/api/time-scale");
-      const data = await res.json();
-      applyTimeScaleUi(data);
+    function publishStatus(data) {
+      window.__navigatorLastStatus = data;
+      window.dispatchEvent(new CustomEvent("navigator-status", { detail: data }));
+    }
+
+    function applyServerConnection(state) {
+      serverStatusEl.classList.remove("connecting", "connected", "disconnected");
+      serverStatusEl.classList.add(state);
+      const labels = {
+        connecting: "Connecting…",
+        connected: "Server connected",
+        disconnected: "Server unreachable",
+      };
+      serverStatusTextEl.textContent = labels[state];
     }
 
     async function setTimeScale(preset) {
@@ -341,7 +385,7 @@ __TARGET_BUTTONS__
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ preset }),
         });
-        await refreshTimeScale();
+        await refresh();
       } finally {
         for (const btn of timeScaleButtons) {
           btn.disabled = false;
@@ -353,18 +397,49 @@ __TARGET_BUTTONS__
       btn.addEventListener("click", () => setTimeScale(btn.dataset.preset));
     }
 
-    async function refresh() {
-      const res = await fetch("/api/status");
-      const data = await res.json();
-      applyTargetUi(data);
-      if (data.speed_km_h != null) {
-        speedEl.textContent = "Surface speed: " + data.speed_km_h.toFixed(2) + " km/h";
-      } else {
-        speedEl.textContent = "";
-      }
-      logsEl.textContent = (data.logs || []).join("\\n");
-      logsEl.scrollTop = logsEl.scrollHeight;
+    function logsOpen() {
+      return logsPanel.hasAttribute("open");
     }
+
+    let navigatorSession = null;
+
+    async function refresh() {
+      const url = logsOpen() ? "/api/status?logs=1" : "/api/status";
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          applyServerConnection("disconnected");
+          return;
+        }
+        const data = await res.json();
+        applyServerConnection("connected");
+        applyTargetUi(data);
+        applyTimeScaleUi(data.time_scale);
+        if (data.speed_km_h != null) {
+          speedEl.textContent = "Surface speed: " + data.speed_km_h.toFixed(2) + " km/h";
+        } else {
+          speedEl.textContent = "";
+        }
+        if (logsOpen()) {
+          logsEl.textContent = (data.logs || []).join("\\n");
+          logsEl.scrollTop = logsEl.scrollHeight;
+        }
+        if (navigatorSession === null) {
+          navigatorSession = data.session;
+        } else if (data.session !== navigatorSession) {
+          location.reload();
+        }
+        publishStatus(data);
+      } catch {
+        applyServerConnection("disconnected");
+      }
+    }
+
+    logsPanel.addEventListener("toggle", () => {
+      if (logsOpen()) {
+        void refresh();
+      }
+    });
 
     async function setTarget(target) {
       for (const btn of targetButtons) {
@@ -389,30 +464,7 @@ __TARGET_BUTTONS__
     }
 
     refresh();
-    refreshTimeScale();
     setInterval(refresh, __POLL_MS__);
-    setInterval(refreshTimeScale, 500);
-
-    let navigatorSession = null;
-    async function pollNavigatorSession() {
-      try {
-        const res = await fetch("/api/navigator-session");
-        if (!res.ok) {
-          return;
-        }
-        const data = await res.json();
-        if (navigatorSession === null) {
-          navigatorSession = data.session;
-          return;
-        }
-        if (data.session !== navigatorSession) {
-          location.reload();
-        }
-      } catch {
-      }
-    }
-    pollNavigatorSession();
-    setInterval(pollNavigatorSession, __SESSION_POLL_MS__);
   </script>
 </body>
 </html>
@@ -492,7 +544,6 @@ def _index_html() -> str:
     return (
         _INDEX_HTML.replace("__VIEWER_SCRIPT__", f"/viewer.js?v={session}")
         .replace("__POLL_MS__", str(_STATUS_POLL_MS))
-        .replace("__SESSION_POLL_MS__", str(_SESSION_POLL_MS))
         .replace("__TARGET_BUTTONS__", _target_buttons_html())
     )
 
@@ -501,19 +552,49 @@ def _request_path(path: str) -> str:
     return path.split("?", 1)[0]
 
 
-def _status_payload(buttons: ButtonTargetSource, log_buffer: LogBuffer) -> dict[str, object]:
+def _status_include_logs(path: str) -> bool:
+    if "?" not in path:
+        return False
+    query = parse_qs(path.split("?", 1)[1], keep_blank_values=True)
+    values = query.get("logs")
+    if not values:
+        return False
+    flag = values[-1].lower()
+    return flag in ("", "1", "true", "yes")
+
+
+def _status_payload(
+    buttons: ButtonTargetSource,
+    log_buffer: LogBuffer,
+    *,
+    include_logs: bool,
+) -> dict[str, object]:
     target = buttons.selected_button["target"]
     _surface, _euler, speed_au_s = observer_surface_vector_and_euler_angles_for_target(simulation_time(), target)
     speed_km_h: float | None = None
     if target not in _BODY_TARGETS:
         speed_km_s = speed_au_s * (1 * u.au).to_value(u.km)
         speed_km_h = float(speed_km_s * 3600.0)
-    return {
+    payload: dict[str, object] = {
         "target": target.value,
         "target_label": target.label,
         "speed_km_h": speed_km_h,
-        "logs": log_buffer.lines(),
     }
+    if include_logs:
+        payload["logs"] = log_buffer.lines()
+    return payload
+
+
+def _web_status_payload(
+    buttons: ButtonTargetSource,
+    log_buffer: LogBuffer,
+    *,
+    include_logs: bool,
+) -> dict[str, object]:
+    payload = _status_payload(buttons, log_buffer, include_logs=include_logs)
+    payload["time_scale"] = time_scale_status_payload()
+    payload["session"] = navigator_session_id()
+    return payload
 
 
 def _choose_content_encoding(accept_header: str) -> str | None:
@@ -672,7 +753,9 @@ async def _handle_client(
             payload = json.dumps({"session": navigator_session_id()}).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/status" and method == "GET":
-            payload = json.dumps(_status_payload(buttons, log_buffer)).encode("utf-8")
+            payload = json.dumps(
+                _web_status_payload(buttons, log_buffer, include_logs=_status_include_logs(path))
+            ).encode("utf-8")
             writer.write(_http_response(200, payload, "application/json", accept_encoding=accept_encoding))
         elif route == "/api/scene" and method == "GET":
             target = buttons.selected_button["target"]
