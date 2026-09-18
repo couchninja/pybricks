@@ -57,6 +57,7 @@ const BODY_FOR_TARGET: Partial<Record<string, string>> = {
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const EARTH_VIEWPORT_FILL = 0.9;
+const ORBIT_VIEWPORT_FILL = 0.9;
 
 export type OrbitCameraPose = {
   offset: THREE.Vector3;
@@ -261,6 +262,121 @@ export function heavenlyBodyOrbitRadiusAu(
   return snapshot.earth_orbit_radius_au;
 }
 
+function halfViewportFovRad(camera: THREE.PerspectiveCamera, fill: number): number {
+  const halfFovY = THREE.MathUtils.degToRad(camera.fov / 2) * fill;
+  const halfFovX = Math.atan(Math.tan(halfFovY) * camera.aspect) * fill;
+  return Math.min(halfFovX, halfFovY);
+}
+
+function issOrbitPlaneNormalTowardObserver(
+  snapshot: SceneSnapshot,
+  earthCenter: THREE.Vector3,
+  observer: THREE.Vector3,
+  currentOffsetDirection: THREE.Vector3,
+): THREE.Vector3 | null {
+  const path = snapshot.paths.find((entry) => entry.name === "iss_orbit");
+  if (!path) {
+    return null;
+  }
+  const normal = newellPlaneNormal(pathPoints(path));
+  if (!normal) {
+    return null;
+  }
+  const observerSide = observer.clone().sub(earthCenter).dot(normal);
+  if (observerSide < -1e-20) {
+    normal.negate();
+  } else if (Math.abs(observerSide) <= 1e-20 && currentOffsetDirection.dot(normal) < 0) {
+    normal.negate();
+  }
+  return normal;
+}
+
+function minDistanceToFramePointsInView(
+  camera: THREE.PerspectiveCamera,
+  observer: THREE.Vector3,
+  offsetDirection: THREE.Vector3,
+  points: THREE.Vector3[],
+  minDistance: number,
+  maxDistance: number,
+): number {
+  if (points.length === 0) {
+    return minDistance;
+  }
+  const halfFov = halfViewportFovRad(camera, ORBIT_VIEWPORT_FILL);
+  const fits = (distance: number): boolean => {
+    const cameraPosition = observer.clone().addScaledVector(offsetDirection, distance);
+    const toPivot = observer.clone().sub(cameraPosition).normalize();
+    for (const point of points) {
+      const toPoint = point.clone().sub(cameraPosition);
+      if (toPoint.lengthSq() < 1e-24) {
+        continue;
+      }
+      if (toPoint.normalize().angleTo(toPivot) > halfFov) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const upper = Number.isFinite(maxDistance) && maxDistance > 0 ? maxDistance : minDistance;
+  if (!fits(upper)) {
+    return upper;
+  }
+  if (fits(minDistance)) {
+    return minDistance;
+  }
+
+  let lo = minDistance;
+  let hi = upper;
+  for (let step = 0; step < 48; step += 1) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return hi;
+}
+
+function desiredIssOrbitCameraPose(
+  camera: THREE.PerspectiveCamera,
+  snapshot: SceneSnapshot,
+  observer: THREE.Vector3,
+  bodyWorldPosition: (name: string) => THREE.Vector3 | null,
+  currentOffsetDirection: THREE.Vector3,
+  maxDistance: number,
+): OrbitCameraPose | null {
+  const earthCenter = bodyWorldPosition("earth");
+  if (!earthCenter) {
+    return null;
+  }
+  const normal = issOrbitPlaneNormalTowardObserver(snapshot, earthCenter, observer, currentOffsetDirection);
+  if (!normal) {
+    return null;
+  }
+
+  const path = snapshot.paths.find((entry) => entry.name === "iss_orbit");
+  if (!path) {
+    return null;
+  }
+  const orbitPoints = pathPoints(path);
+  const toward = targetWorldPosition(snapshot, observer, bodyWorldPosition);
+  const up = inPlaneHorizontal(normal, observer, toward);
+
+  const minDistance = Math.max(snapshot.default_camera_distance_au * 0.01, 1e-14);
+  let distance = minDistanceToFramePointsInView(camera, observer, normal, orbitPoints, minDistance, maxDistance);
+  if (Number.isFinite(maxDistance) && maxDistance > 0) {
+    distance = Math.min(distance, maxDistance);
+  }
+  distance = Math.max(distance, minDistance);
+
+  return {
+    offset: normal.clone().multiplyScalar(distance),
+    up,
+  };
+}
+
 function orbitRadiusAu(snapshot: SceneSnapshot, bodyWorldPosition: (name: string) => THREE.Vector3 | null): number {
   const target = framingPointingTarget(snapshot.pointing_target);
 
@@ -323,9 +439,7 @@ function desiredEarthRotationCameraPose(
         : new THREE.Vector3().crossVectors(up, new THREE.Vector3(1, 0, 0)).normalize();
   }
 
-  const halfFovY = THREE.MathUtils.degToRad(camera.fov / 2) * EARTH_VIEWPORT_FILL;
-  const halfFovX = Math.atan(Math.tan(halfFovY) * camera.aspect) * EARTH_VIEWPORT_FILL;
-  const halfFov = Math.min(halfFovX, halfFovY);
+  const halfFov = halfViewportFovRad(camera, EARTH_VIEWPORT_FILL);
 
   const distance = Math.max(earthRadius / Math.tan(halfFov) - earthRadius, earthRadius * 0.25);
 
@@ -343,6 +457,20 @@ export function desiredOrbitTargetCameraPose(
   currentOffsetDirection: THREE.Vector3,
   maxDistance: number,
 ): OrbitCameraPose {
+  if (framingPointingTarget(snapshot.pointing_target) === "iss") {
+    const issPose = desiredIssOrbitCameraPose(
+      camera,
+      snapshot,
+      observer,
+      bodyWorldPosition,
+      currentOffsetDirection,
+      maxDistance,
+    );
+    if (issPose) {
+      return issPose;
+    }
+  }
+
   if (snapshot.pointing_target === "earth_rotation") {
     const earthPose = desiredEarthRotationCameraPose(
       camera,
