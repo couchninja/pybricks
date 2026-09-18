@@ -20,11 +20,14 @@
     },
     "python.languageServer": "None",
     // Disable Python extension's terminal auto-activation (we use pixi, not conda)
-    // No longer needed on osx, test on nas
-    // "python.terminal.activateEnvironment": false,
+    // No longer needed on osx, but needed on raspberry pi
+    "python.terminal.activateEnvironment": false,
     "python-envs.pythonProjects": [],
     "python.defaultInterpreterPath": "${workspaceFolder}/.pixi/envs/default/bin/python",
     "ty.interpreter": "${workspaceFolder}/.pixi/envs/default/bin/python",
-    "python-envs.defaultEnvManager": "renan-r-santos.pixi-code:pixi",
-    "python-envs.defaultPackageManager": "renan-r-santos.pixi-code:pixi",
+    // LLM changed this - test if it works as we want
+    // "python-envs.defaultEnvManager": "renan-r-santos.pixi-code:pixi",
+    // "python-envs.defaultPackageManager": "renan-r-santos.pixi-code:pixi",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
 }
