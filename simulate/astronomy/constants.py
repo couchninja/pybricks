@@ -54,8 +54,6 @@ CAMERA_Z_NEAR_EARTH_RADII = 0.01
 CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER = 2.0
 # gluPerspective rejects extreme z_far / z_near ratios (~1e8 at true scale).
 MAX_DEPTH_RATIO = 5e7
-# macOS OpenGL rejects z_near below ~1e-5 AU.
-OPENGL_Z_NEAR_MIN_AU = 1e-5
 
 SUN_COLOR = [255, 210, 60, 255]
 EARTH_ORBIT_COLOR = SUN_COLOR

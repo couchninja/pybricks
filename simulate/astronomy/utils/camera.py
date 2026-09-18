@@ -6,8 +6,6 @@ from simulate.astronomy.constants import (
     CAMERA_Z_NEAR_EARTH_RADII,
     EARTH_CENTER_ORIGIN,
     EARTH_RADIUS_AU,
-    MAX_DEPTH_RATIO,
-    OPENGL_Z_NEAR_MIN_AU,
 )
 
 
@@ -32,9 +30,5 @@ def camera_clip_planes(
     except Exception:
         scene_scale = 1.0
     z_far = camera_distance + scene_scale * CAMERA_Z_FAR_SCENE_SCALE_MULTIPLIER
-    z_near = max(
-        EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII,
-        z_far / MAX_DEPTH_RATIO,
-        OPENGL_Z_NEAR_MIN_AU,
-    )
+    z_near = EARTH_RADIUS_AU * CAMERA_Z_NEAR_EARTH_RADII
     return z_near, z_far
