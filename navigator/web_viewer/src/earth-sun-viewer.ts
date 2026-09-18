@@ -1,6 +1,9 @@
 import * as THREE from "three";
+import { WebGPURenderer } from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+
+import { createViewerOutlinePipeline, type ViewerOutlinePipeline } from "./viewer-outline-pass";
 
 import {
   cameraPoseFromState,
@@ -70,10 +73,12 @@ function createSphereMesh(radius: number, color: Rgb, emissiveIntensity = 0): TH
 }
 
 const ARROW_HEAD_LENGTH_FRACTION = 0.18;
-const ARROW_HEAD_RADIUS_EARTH_RADII = 0.12;
-const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.04;
+const ARROW_HEAD_RADIUS_EARTH_RADII = 0.30;
+const ARROW_SHAFT_RADIUS_EARTH_RADII = 0.1;
 const ARROW_EMISSIVE_INTENSITY = 0.45;
 const ARROW_OCCLUDED_OPACITY = 0.45;
+/** Temporary: set true to draw the faded behind-geometry arrow pass. */
+const ARROW_OCCLUDED_PASS_ENABLED = true;
 const ARROW_OCCLUDED_RENDER_ORDER = 1;
 const ARROW_VISIBLE_RENDER_ORDER = 2;
 /** Web view: longer than desktop so the arrow stays readable when zoomed out. */
@@ -96,7 +101,12 @@ function addArrowPart(
   const visible = new THREE.Mesh(geometry, visibleMaterial);
   visible.position.y = positionY;
   visible.renderOrder = ARROW_VISIBLE_RENDER_ORDER;
+  visible.userData.arrowOutline = true;
   group.add(visible);
+
+  if (!ARROW_OCCLUDED_PASS_ENABLED) {
+    return;
+  }
 
   const occluded = new THREE.Mesh(geometry, occludedMaterial);
   occluded.position.y = positionY;
@@ -114,11 +124,9 @@ function createSceneArrow(
   shaftRadius: number,
 ): THREE.Group {
   const group = new THREE.Group();
-  const visibleMaterial = new THREE.MeshStandardMaterial({
-    color,
-    emissive: color.clone(),
-    emissiveIntensity: ARROW_EMISSIVE_INTENSITY,
-    roughness: 0.75,
+  const visibleColor = color.clone().multiplyScalar(1 + ARROW_EMISSIVE_INTENSITY);
+  const visibleMaterial = new THREE.MeshLambertMaterial({
+    color: visibleColor,
   });
   const occludedMaterial = new THREE.MeshBasicMaterial({
     color,
@@ -193,7 +201,9 @@ type PathEntry = {
 export class EarthSunViewer {
   readonly root: HTMLElement;
 
-  private readonly renderer: THREE.WebGLRenderer;
+  private renderer!: WebGPURenderer;
+  private outlinePipeline: ViewerOutlinePipeline | null = null;
+  private renderReady = false;
   private readonly labelRenderer: CSS2DRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
@@ -257,7 +267,7 @@ export class EarthSunViewer {
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.001, 1000);
     this.camera.position.set(0, 0, 1);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer = new WebGPURenderer({ antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.canvasHost.appendChild(this.renderer.domElement);
 
@@ -288,6 +298,14 @@ export class EarthSunViewer {
       this.onResize();
     });
     this.resizeObserver.observe(this.canvasHost);
+    void this.bootstrapRenderer();
+  }
+
+  private async bootstrapRenderer(): Promise<void> {
+    await this.renderer.init();
+    this.outlinePipeline = createViewerOutlinePipeline(this.renderer, this.scene, this.camera);
+    this.syncOutlineSelection();
+    this.renderReady = true;
     this.onResize();
     this.animate();
   }
@@ -300,6 +318,8 @@ export class EarthSunViewer {
     cancelAnimationFrame(this.animationId);
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.outlinePipeline?.dispose();
+    this.outlinePipeline = null;
     this.renderer.dispose();
     this.root.remove();
   }
@@ -499,6 +519,12 @@ export class EarthSunViewer {
       this.scene.add(arrow);
       this.arrows.set(name, arrow);
     }
+    this.syncOutlineSelection();
+  }
+
+  private syncOutlineSelection(): void {
+    this.outlinePipeline?.syncArrowOutline(this.arrows.values());
+    this.outlinePipeline?.syncBodyOutline(this.bodies);
   }
 
   private syncOrbitPivot(): void {
@@ -615,6 +641,10 @@ export class EarthSunViewer {
     this.camera.aspect = width / Math.max(height, 1);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.outlinePipeline?.setSize(
+      Math.max(1, Math.floor(width * this.renderer.getPixelRatio())),
+      Math.max(1, Math.floor(height * this.renderer.getPixelRatio())),
+    );
     this.labelRenderer.setSize(width, height);
 
     if (this.camera.position.lengthSq() < 1e-12) {
@@ -643,9 +673,12 @@ export class EarthSunViewer {
       return;
     }
     this.lastRenderTime = now;
+    if (!this.renderReady || this.outlinePipeline === null) {
+      return;
+    }
     this.layoutArrows();
     this.syncClipPlanes();
-    this.renderer.render(this.scene, this.camera);
+    this.outlinePipeline.renderPipeline.render();
     this.updateFps();
   };
 

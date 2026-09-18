@@ -7,12 +7,12 @@
     "dev": "vite"
   },
   "devDependencies": {
-    "@types/three": "^0.180.0",
+    "@types/three": "^0.186.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.5"
   },
   "dependencies": {
     "@tweenjs/tween.js": "^25.0.0",
-    "three": "^0.180.0"
+    "three": "^0.186.0"
   }
 }
