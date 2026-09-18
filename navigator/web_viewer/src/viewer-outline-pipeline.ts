@@ -11,7 +11,7 @@
  * in front, so adding both outline colors stacks Earth halo on the arrow.
  *
  * Fix: before each frame, {@link ./arrow-coverage-mask.ts} renders the arrow
- * outline meshes (see `userData.arrowOutline` in earth-sun-viewer) into a mask
+ * outline meshes (see `userData.arrowOutline` on arrows and `ARROW_OUTLINE_BODY_NAMES`) into a mask
  * with depth test off—full arrow silhouette, matching the visible + occluded
  * arrow draw strategy. That mask zeroes body outline contribution on those
  * pixels. Call `prepareFrame()` immediately before `renderPipeline.render()`.
@@ -29,18 +29,40 @@ const ARROW_OUTLINE_EDGE_THICKNESS = 0.4;
 const BODY_OUTLINE_EDGE_STRENGTH = 1;
 const BODY_OUTLINE_EDGE_THICKNESS = 0.4;
 
-export const BODY_OUTLINE_NAMES = ["earth", "iss", "moon", "sun", "galactic_center"] as const;
+export const BODY_OUTLINE_NAMES = ["earth", "moon", "sun", "galactic_center"] as const;
+
+/** Bodies outlined with arrows (same OutlineNode + coverage mask as flat arrows). */
+export const ARROW_OUTLINE_BODY_NAMES = ["iss"] as const;
 
 export type ViewerOutlinePipeline = {
   renderPipeline: RenderPipeline;
   prepareFrame: () => void;
-  syncArrowOutline: (arrowGroups: Iterable<Group>) => void;
+  syncArrowOutline: (arrowGroups: Iterable<Group>, bodies: ReadonlyMap<string, { root: Object3D }>) => void;
   syncBodyOutline: (bodies: ReadonlyMap<string, { root: Object3D }>) => void;
   setSize: (width: number, height: number) => void;
   dispose: () => void;
 };
 
-function collectArrowOutlineMeshes(arrowGroups: Iterable<Group>): Mesh[] {
+function collectMeshesForBodyNames(bodies: ReadonlyMap<string, { root: Object3D }>, names: readonly string[]): Mesh[] {
+  const next: Mesh[] = [];
+  for (const name of names) {
+    const entry = bodies.get(name);
+    if (!entry) {
+      continue;
+    }
+    entry.root.traverse((child) => {
+      if (child instanceof Mesh) {
+        next.push(child);
+      }
+    });
+  }
+  return next;
+}
+
+function collectArrowOutlineMeshes(
+  arrowGroups: Iterable<Group>,
+  bodies: ReadonlyMap<string, { root: Object3D }>,
+): Mesh[] {
   const next: Mesh[] = [];
   for (const group of arrowGroups) {
     for (const child of group.children) {
@@ -49,6 +71,7 @@ function collectArrowOutlineMeshes(arrowGroups: Iterable<Group>): Mesh[] {
       }
     }
   }
+  next.push(...collectMeshesForBodyNames(bodies, ARROW_OUTLINE_BODY_NAMES));
   return next;
 }
 
@@ -90,8 +113,8 @@ export function createViewerOutlinePipeline(
   renderPipeline.outputNode = scenePass.add(bodyOutline.mul(arrowCoverage.oneMinus())).add(arrowOutline);
   renderPipeline.needsUpdate = true;
 
-  const syncArrowOutline = (arrowGroups: Iterable<Group>): void => {
-    arrowOutlineMeshes = collectArrowOutlineMeshes(arrowGroups);
+  const syncArrowOutline = (arrowGroups: Iterable<Group>, bodies: ReadonlyMap<string, { root: Object3D }>): void => {
+    arrowOutlineMeshes = collectArrowOutlineMeshes(arrowGroups, bodies);
     arrowOutlinePass.selectedObjects = arrowOutlineMeshes;
   };
 
@@ -100,19 +123,7 @@ export function createViewerOutlinePipeline(
   };
 
   const syncBodyOutline = (bodies: ReadonlyMap<string, { root: Object3D }>): void => {
-    const next: Object3D[] = [];
-    for (const name of BODY_OUTLINE_NAMES) {
-      const entry = bodies.get(name);
-      if (!entry) {
-        continue;
-      }
-      entry.root.traverse((child) => {
-        if (child instanceof Mesh) {
-          next.push(child);
-        }
-      });
-    }
-    bodyOutlinePass.selectedObjects = next;
+    bodyOutlinePass.selectedObjects = collectMeshesForBodyNames(bodies, BODY_OUTLINE_NAMES);
   };
 
   return {

@@ -533,7 +533,7 @@ export class EarthSunViewer {
   }
 
   private syncOutlineSelection(): void {
-    this.outlinePipeline?.syncArrowOutline(this.arrows.values());
+    this.outlinePipeline?.syncArrowOutline(this.arrows.values(), this.bodies);
     this.outlinePipeline?.syncBodyOutline(this.bodies);
   }
 
