@@ -1,8 +1,27 @@
+/**
+ * WebGPU beauty pass + body/arrow outlines (three.js OutlineNode).
+ *
+ * Composite: scene + bodyOutline × (1 − arrowCoverage) + arrowOutline
+ *
+ * Arrow vs body outlines
+ * ----------------------
+ * Bodies and arrows use separate OutlineNode instances. OutlineNode depth-tests
+ * selected meshes only against *non-selected* scene geometry, not against each
+ * other. Earth’s blurred silhouette can still land on pixels where the arrow sits
+ * in front, so adding both outline colors stacks Earth halo on the arrow.
+ *
+ * Fix: before each frame, {@link ./arrow-coverage-mask.ts} renders the arrow
+ * outline meshes (see `userData.arrowOutline` in earth-sun-viewer) into a mask
+ * with depth test off—full arrow silhouette, matching the visible + occluded
+ * arrow draw strategy. That mask zeroes body outline contribution on those
+ * pixels. Call `prepareFrame()` immediately before `renderPipeline.render()`.
+ */
 import { Color, Mesh, Object3D, type Camera, type Group, type Scene } from "three";
 import type OutlineNode from "three/addons/tsl/display/OutlineNode.js";
 import { RenderPipeline, WebGPURenderer } from "three/webgpu";
 import { float, pass, uniform } from "three/tsl";
 import { outline } from "three/addons/tsl/display/OutlineNode.js";
+import { createArrowCoverageMask } from "./arrow-coverage-mask";
 
 const ARROW_OUTLINE_EDGE_STRENGTH = 1;
 const ARROW_OUTLINE_EDGE_THICKNESS = 0.4;
@@ -20,11 +39,24 @@ export const BODY_OUTLINE_NAMES = [
 
 export type ViewerOutlinePipeline = {
   renderPipeline: RenderPipeline;
+  prepareFrame: () => void;
   syncArrowOutline: (arrowGroups: Iterable<Group>) => void;
   syncBodyOutline: (bodies: ReadonlyMap<string, { root: Object3D }>) => void;
   setSize: (width: number, height: number) => void;
   dispose: () => void;
 };
+
+function collectArrowOutlineMeshes(arrowGroups: Iterable<Group>): Mesh[] {
+  const next: Mesh[] = [];
+  for (const group of arrowGroups) {
+    for (const child of group.children) {
+      if (child instanceof Mesh && child.userData.arrowOutline === true) {
+        next.push(child);
+      }
+    }
+  }
+  return next;
+}
 
 function createOutlinePass(
   scene: Scene,
@@ -39,11 +71,14 @@ function createOutlinePass(
   });
 }
 
+function outlineMaskForPass(outlinePass: OutlineNode) {
+  return outlinePass.visibleEdge.add(outlinePass.hiddenEdge);
+}
+
 function outlineColorForPass(outlinePass: OutlineNode, edgeStrength: number) {
   const visibleEdgeColor = uniform(new Color(0xffffff));
   const strength = uniform(edgeStrength);
-  const edgeMask = outlinePass.visibleEdge.add(outlinePass.hiddenEdge);
-  return edgeMask.mul(visibleEdgeColor).mul(strength);
+  return outlineMaskForPass(outlinePass).mul(visibleEdgeColor).mul(strength);
 }
 
 export function createViewerOutlinePipeline(
@@ -53,24 +88,27 @@ export function createViewerOutlinePipeline(
 ): ViewerOutlinePipeline {
   const arrowOutlinePass = createOutlinePass(scene, camera, ARROW_OUTLINE_EDGE_THICKNESS);
   const bodyOutlinePass = createOutlinePass(scene, camera, BODY_OUTLINE_EDGE_THICKNESS);
+  const arrowCoverageMask = createArrowCoverageMask();
+  let arrowOutlineMeshes: Mesh[] = [];
 
   const scenePass = pass(scene, camera);
+  const arrowOutline = outlineColorForPass(arrowOutlinePass, ARROW_OUTLINE_EDGE_STRENGTH);
+  const bodyOutline = outlineColorForPass(bodyOutlinePass, BODY_OUTLINE_EDGE_STRENGTH);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TSL node typing
+  const arrowCoverage = arrowCoverageMask.coverageNode as any;
   const renderPipeline = new RenderPipeline(renderer);
-  renderPipeline.outputNode = outlineColorForPass(arrowOutlinePass, ARROW_OUTLINE_EDGE_STRENGTH)
-    .add(outlineColorForPass(bodyOutlinePass, BODY_OUTLINE_EDGE_STRENGTH))
-    .add(scenePass);
+  renderPipeline.outputNode = scenePass
+    .add(bodyOutline.mul(arrowCoverage.oneMinus()))
+    .add(arrowOutline);
   renderPipeline.needsUpdate = true;
 
   const syncArrowOutline = (arrowGroups: Iterable<Group>): void => {
-    const next: Object3D[] = [];
-    for (const group of arrowGroups) {
-      for (const child of group.children) {
-        if (child instanceof Mesh && child.userData.arrowOutline === true) {
-          next.push(child);
-        }
-      }
-    }
-    arrowOutlinePass.selectedObjects = next;
+    arrowOutlineMeshes = collectArrowOutlineMeshes(arrowGroups);
+    arrowOutlinePass.selectedObjects = arrowOutlineMeshes;
+  };
+
+  const prepareFrame = (): void => {
+    arrowCoverageMask.render(renderer, scene, camera, arrowOutlineMeshes);
   };
 
   const syncBodyOutline = (bodies: ReadonlyMap<string, { root: Object3D }>): void => {
@@ -91,15 +129,18 @@ export function createViewerOutlinePipeline(
 
   return {
     renderPipeline,
+    prepareFrame,
     syncArrowOutline,
     syncBodyOutline,
     setSize: (width: number, height: number) => {
       arrowOutlinePass.setSize(width, height);
       bodyOutlinePass.setSize(width, height);
+      arrowCoverageMask.setSize(width, height);
     },
     dispose: () => {
       arrowOutlinePass.dispose();
       bodyOutlinePass.dispose();
+      arrowCoverageMask.dispose();
       renderPipeline.dispose();
     },
   };
